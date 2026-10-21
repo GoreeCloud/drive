@@ -1,0 +1,23 @@
+name: IdP keyboard accessibility
+on:
+  pull_request:
+    paths:
+      - "services/idp/src/app.css"
+      - "scripts/tests/test_idp_focus.py"
+      - ".github/workflows/idp-accessibility.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/idp/src/app.css"
+      - "scripts/tests/test_idp_focus.py"
+      - ".github/workflows/idp-accessibility.yml"
+permissions:
+  contents: read
+jobs:
+  idp-focus:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keyboard focus CSS regression
+        run: python3 -m unittest discover -s scripts/tests -p 'test_idp_focus.py' -v
