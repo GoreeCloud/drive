@@ -1,0 +1,149 @@
+<template>
+  <div v-if="!createdToken">
+    <oc-text-input
+      v-model="tokenLabel"
+      :label="$gettext('Note')"
+      :error-message="tokenLabelErrorMessage"
+      required-mark
+    />
+    <oc-datepicker
+      :label="$gettext('Expiration date')"
+      :is-dark="currentTheme.isDark"
+      class="mt-2"
+      type="date"
+      :min-date="minDate"
+      :max-date="DateTime.now().plus({ years: 100 })"
+      required-mark
+      @date-changed="onDateChanged"
+    />
+    <teleport defer :to="`#${modalActionsTarget(modal)}`">
+      <oc-button
+        :disabled="isConfirmDisabled"
+        :show-spinner="isCreating"
+        :appearance="isCreating ? 'outline' : 'filled'"
+        class="oc-modal-body-actions-confirm ml-2"
+        @click="createAppToken"
+      >
+        {{ $gettext('Confirm') }}
+      </oc-button>
+    </teleport>
+  </div>
+  <div v-else>
+    <span
+      v-text="
+        $gettext(
+          'Your app token has been successfully created. This is the only time it will be displayed, so please make sure to copy it now.'
+        )
+      "
+    />
+    <div class="mt-4 mb-2 flex items-center rounded-sm">
+      <div class="w-full">
+        <div
+          class="created-token flex items-center justify-between rounded-sm p-2 font-bold bg-role-surface-container-high"
+        >
+          {{ createdToken }}
+          <oc-button
+            v-oc-tooltip="$gettext('Copy app token to clipboard')"
+            appearance="raw"
+            class="copy-app-token-btn ml-2 p-1"
+            :aria-label="$gettext('Copy app token to clipboard')"
+            @click="copy(createdToken)"
+          >
+            <oc-icon :name="copied ? 'check' : 'file-copy'" fill-type="line" />
+          </oc-button>
+        </div>
+        <div class="text-sm text-right mt-2">
+          <span v-text="$gettext('Expires on:')" />
+          <span v-text="formatDateFromDateTime(expiryDate, currentLanguage)" />
+        </div>
+      </div>
+    </div>
+    <teleport defer :to="`#${modalActionsTarget(modal)}`">
+      <oc-button
+        class="oc-modal-body-actions-confirm ml-2"
+        appearance="filled"
+        @click="$emit('confirm')"
+      >
+        {{ $gettext('Close') }}
+      </oc-button>
+    </teleport>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, unref, watch } from 'vue'
+import { DateTime } from 'luxon'
+import {
+  formatDateFromDateTime,
+  Modal,
+  modalActionsTarget,
+  useClientService,
+  useMessages,
+  useModals,
+  useThemeStore
+} from '@opencloud-eu/web-pkg'
+import { useGettext } from 'vue3-gettext'
+import { useClipboard } from '@vueuse/core'
+import { AppToken } from '../../helpers/appTokens'
+import { storeToRefs } from 'pinia'
+
+const { modal } = defineProps<{ modal: Modal }>()
+const emit = defineEmits(['confirm', 'cancel', 'created'])
+
+const { $gettext, current: currentLanguage } = useGettext()
+const { httpAuthenticated: client } = useClientService()
+const { copy, copied } = useClipboard({ legacy: true, copiedDuring: 1500 })
+const { showErrorMessage } = useMessages()
+const { updateModal } = useModals()
+const themeStore = useThemeStore()
+const { currentTheme } = storeToRefs(themeStore)
+
+const tokenLabel = ref<string>('')
+const trimmedTokenLabel = computed(() => unref(tokenLabel).trim())
+const tokenLabelErrorMessage = ref<string>('')
+watch(tokenLabel, () => {
+  tokenLabelErrorMessage.value = unref(trimmedTokenLabel) ? '' : $gettext('The note is required')
+})
+
+const expiryDate = ref<DateTime>()
+const minDate = computed(() => DateTime.now())
+const onDateChanged = ({ date, error }: { date: DateTime; error: boolean }) => {
+  expiryDate.value = error ? undefined : date
+}
+
+const isConfirmDisabled = computed<boolean>(() => {
+  return !unref(trimmedTokenLabel) || !unref(expiryDate) || unref(isCreating)
+})
+const createdToken = ref('')
+// Guards against requesting a second token while a request is still in flight.
+const isCreating = ref(false)
+const createAppToken = async () => {
+  if (unref(isConfirmDisabled)) {
+    return
+  }
+  isCreating.value = true
+  // This modal is dispatched with hidden actions, so the only other way out is the
+  // modal's cancel button. Mark it loading to disable that button while the token
+  // is being created - cancelling here would complete the request without ever
+  // showing the resulting token.
+  updateModal(modal.id, 'isLoading', true)
+  try {
+    const label = unref(trimmedTokenLabel)
+    const expiry = `${unref(expiryDate).diff(DateTime.now(), 'hours').hours}h`
+    const { data } = await client.post<AppToken>('/auth-app/tokens', null, {
+      params: { label, expiry }
+    })
+    createdToken.value = data.token
+    emit('created')
+  } catch (error) {
+    console.error(error)
+    showErrorMessage({
+      title: $gettext('An error occurred while creating the app token.'),
+      errors: [error]
+    })
+  } finally {
+    isCreating.value = false
+    updateModal(modal.id, 'isLoading', false)
+  }
+}
+</script>

@@ -33,10 +33,12 @@ the preview, avoiding an unreviewed cosmetic cutover for existing deployments.
   They remain valid compatibility placeholders; **they are not GoreeCloud
   Drive's approved first-party product identity**. Do not publish the preview
   as a fully rebranded production product.
-- **Client:** The separately maintained OpenCloud Vue/TypeScript frontend is
-  AGPL-3.0 and its source was **not** forked or modified by this theme change.
-  Replacing it or integrating the supported GC UI browser theme controller
-  requires explicit source, licensing, interaction and accessibility review.
+- **Client:** A separate, pinned source snapshot of the AGPL-3.0 OpenCloud
+  Vue/TypeScript frontend now exists under `web-client/`; its real Files
+  application is embedded by a deterministic build. The Foundations preview
+  still does not replace the frontend's component system. Actual supported
+  GC UI component/controller integration, licensing, behavior, identity and
+  accessibility require further review and acceptance.
 - **Platform and accessibility:** Semantic pairing and >=4.5:1 text-token
   contrast tests do not prove rendered layouts, keyboard/AT navigation,
   mobile experience, high-contrast OS mode, responsive behavior, or deployment.

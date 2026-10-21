@@ -1,0 +1,47 @@
+name: GoreeCloud Drive web-client build
+on:
+  pull_request:
+    paths:
+      - "web-client/**"
+      - "scripts/build_drive_web_client.sh"
+      - "services/web/assets/core/**"
+      - "services/web/web_embedded_test.go"
+      - ".github/workflows/web-client-build.yml"
+  push:
+    branches: [main]
+    paths:
+      - "web-client/**"
+      - "scripts/build_drive_web_client.sh"
+      - "services/web/assets/core/**"
+      - "services/web/web_embedded_test.go"
+      - ".github/workflows/web-client-build.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  web-client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.0"
+      - name: Enable pinned PNPM
+        run: corepack enable
+      - name: Rebuild embedded Files frontend from pinned AGPL source
+        run: bash scripts/build_drive_web_client.sh
+      - name: Verify embedded output is generated from checked-in sources
+        run: |
+          git diff --exit-code -- services/web/assets/core
+          test -s web-client/LICENSE
+          test -s web-client/pnpm-lock.yaml
+          test -s services/web/assets/core/index.html
+          grep -q '<title>GoreeCloud Drive</title>' services/web/assets/core/index.html
+          grep -q '"name": "GoreeCloud Drive"' services/web/assets/core/manifest.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Validate real embedded UI and backend web contracts
+        run: go test -mod=vendor ./services/web/...

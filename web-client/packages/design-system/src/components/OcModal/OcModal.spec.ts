@@ -1,0 +1,192 @@
+import { defaultPlugins, mount, shallowMount } from '@opencloud-eu/web-test-helpers'
+import Modal from './OcModal.vue'
+import OcButton from './../OcButton/OcButton.vue'
+
+const defaultProps = {
+  title: 'Example title',
+  message: 'Example message'
+}
+
+const inputProps = {
+  title: 'Create new folder',
+  hasInput: true,
+  inputValue: 'New folder',
+  inputLabel: 'Folder name'
+}
+
+describe('OcModal', () => {
+  it('overrides props message with slot', () => {
+    const wrapper = shallowMount(Modal, {
+      global: { renderStubDefaultSlot: true, plugins: [...defaultPlugins()] },
+      props: {
+        ...defaultProps
+      },
+      slots: {
+        content: '<p>Slot message</p>'
+      }
+    })
+
+    expect(wrapper.find('.oc-modal-body-message > p').text()).toMatch('Slot message')
+    expect(wrapper.html()).toMatchSnapshot()
+  })
+
+  it('matches snapshot', () => {
+    const wrapper = shallowMount(Modal, {
+      global: { renderStubDefaultSlot: true, plugins: [...defaultPlugins()] },
+      props: defaultProps
+    })
+
+    expect(wrapper.html()).toMatchSnapshot()
+  })
+
+  it('only dims the background while it is the topmost modal', () => {
+    const backdrop = (active: boolean) =>
+      shallowMount(Modal, {
+        global: { renderStubDefaultSlot: true, plugins: [...defaultPlugins()] },
+        props: { ...defaultProps, active }
+      }).find('.oc-modal-background')
+
+    expect(backdrop(true).classes()).toContain('bg-black/40')
+    expect(backdrop(false).classes()).not.toContain('bg-black/40')
+  })
+
+  it('displays input', () => {
+    const wrapper = shallowMount(Modal, {
+      global: { renderStubDefaultSlot: true, plugins: [...defaultPlugins()] },
+      props: inputProps
+    })
+
+    expect(wrapper.findAll('.oc-modal-body-input').length).toBe(1)
+    expect(wrapper.html()).toMatchSnapshot()
+  })
+
+  describe('enter key on the input', () => {
+    const mountInputModal = () =>
+      mount(Modal, {
+        global: {
+          renderStubDefaultSlot: true,
+          plugins: [...defaultPlugins()],
+          stubs: { 'focus-trap': true }
+        },
+        props: inputProps
+      })
+
+    it('emits confirm', async () => {
+      const wrapper = mountInputModal()
+      await wrapper.find('.oc-modal-body-input input').trigger('keydown', { key: 'Enter' })
+      expect(wrapper.emitted('confirm')).toEqual([['New folder']])
+    })
+
+    it('does not emit confirm while an IME composition session is active', async () => {
+      const wrapper = mountInputModal()
+      await wrapper
+        .find('.oc-modal-body-input input')
+        .trigger('keydown', { key: 'Enter', isComposing: true })
+      expect(wrapper.emitted('confirm')).toBeUndefined()
+    })
+
+    it('does not emit confirm when the keydown event has keyCode 229', async () => {
+      const wrapper = mountInputModal()
+      await wrapper
+        .find('.oc-modal-body-input input')
+        .trigger('keydown', { key: 'Enter', keyCode: 229 })
+      expect(wrapper.emitted('confirm')).toBeUndefined()
+    })
+  })
+
+  describe('cancelling', () => {
+    const mountModal = (props: Record<string, unknown> = {}) =>
+      mount(Modal, {
+        global: {
+          renderStubDefaultSlot: true,
+          plugins: [...defaultPlugins()],
+          stubs: { 'focus-trap': true }
+        },
+        props: { ...defaultProps, ...props }
+      })
+
+    it('emits cancel when pressing escape', async () => {
+      const wrapper = mountModal()
+      await wrapper.find('[role="dialog"]').trigger('keydown.esc')
+      expect(wrapper.emitted('cancel')).toBeTruthy()
+    })
+
+    it('emits cancel when pressing escape after focus left the dialog', async () => {
+      const wrapper = mountModal()
+      await wrapper.find('.oc-modal-background').trigger('click')
+      pressEscapeFromBody()
+
+      expect(wrapper.emitted('cancel')).toBeTruthy()
+    })
+
+    it('does not emit cancel from the document while inactive', () => {
+      const wrapper = mountModal({ active: false })
+      pressEscapeFromBody()
+
+      expect(wrapper.emitted('cancel')).toBeFalsy()
+    })
+
+    // the cancel button is disabled while loading, so escape has to be blocked as
+    // well. Otherwise an in-flight handler gets discarded without its result ever
+    // reaching the user.
+    it('does not emit cancel while loading', async () => {
+      const wrapper = mountModal({ isLoading: true })
+      await wrapper.find('[role="dialog"]').trigger('keydown.esc')
+      expect(wrapper.emitted('cancel')).toBeFalsy()
+    })
+
+    it('does not emit cancel from the document while loading', () => {
+      const wrapper = mountModal({ isLoading: true })
+      pressEscapeFromBody()
+
+      expect(wrapper.emitted('cancel')).toBeFalsy()
+    })
+  })
+
+  it('displays loading state', async () => {
+    const waitForSpinnerToShow = async () => {
+      await wrapper.vm.$nextTick()
+      return new Promise((resolve) => setTimeout(resolve, 1000))
+    }
+
+    const wrapper = mount(Modal, {
+      global: {
+        renderStubDefaultSlot: true,
+        plugins: [...defaultPlugins()],
+        stubs: {
+          'focus-trap': true
+        }
+      },
+      props: {
+        ...defaultProps,
+        isLoading: true
+      }
+    })
+
+    const cancelButton = wrapper.find('.oc-modal-title-actions-cancel')
+    const confirmButton = wrapper.find('.oc-modal-body-actions-confirm')
+
+    expect(cancelButton.attributes('disabled')).toBeDefined()
+    expect(confirmButton.attributes('disabled')).toBeDefined()
+    expect(
+      wrapper.findComponent<typeof OcButton>('.oc-modal-body-actions-confirm').props('showSpinner')
+    ).toBeFalsy()
+    expect(
+      wrapper.findComponent<typeof OcButton>('.oc-modal-body-actions-confirm').props('appearance')
+    ).toEqual('filled')
+
+    await waitForSpinnerToShow()
+
+    expect(
+      wrapper.findComponent<typeof OcButton>('.oc-modal-body-actions-confirm').props('showSpinner')
+    ).toBeTruthy()
+    expect(
+      wrapper.findComponent<typeof OcButton>('.oc-modal-body-actions-confirm').props('appearance')
+    ).toEqual('outline')
+    expect(wrapper.html()).toMatchSnapshot()
+  })
+})
+
+const pressEscapeFromBody = () => {
+  document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+}

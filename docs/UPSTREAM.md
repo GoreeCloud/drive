@@ -7,7 +7,7 @@
 - **Import date:** October 20, 2026
 - **Import method:** pinned upstream source snapshot imported into the existing GoreeCloud/drive Git history. The original GoreeCloud/drive initial commit is retained; upstream Git commit ancestry is not embedded in the destination. This is a **source-code fork**, **not** a GitHub-hosted upstream-linked fork relationship (`isFork: false` at verification).
 - **Imported server license:** Apache-2.0, retained in `LICENSE`.
-- **Separate upstream web client:** https://github.com/opencloud-eu/web (AGPL-3.0). This import does not include or fork that separate repository.
+- **Separately licensed web client:** https://github.com/opencloud-eu/web (AGPL-3.0); a pinned independently maintained source snapshot was subsequently imported under `web-client/` at commit `954dbee3ac5b428d1f42c6eeaf9184484d1cda43`, with the compiled browser Files app staged into the Go web service. Preserve web-client AGPL and third-party requirements independently of the Apache-2.0 backend. See [WEB-CLIENT-UPSTREAM.md](WEB-CLIENT-UPSTREAM.md).
 - **Canonical product repository:** https://github.com/GoreeCloud/drive
 - **Upstream Git URL:** https://github.com/opencloud-eu/opencloud.git
 
@@ -19,4 +19,4 @@ The initial repository's `README.md` is the GoreeCloud landing page; the unchang
 
 A [read-only OpenCloud source/release/security advisory watch](UPSTREAM-WATCH.md) records a dated public baseline, provides offline regression tests and reports upstream changes for review. It does not automatically incorporate fixes, certify security or replace deployment-specific vulnerability assessments.
 
-**Release boundary:** The source import does not prove deployed, secured, web-client-integrated, GoreeCloud UI-compliant, or production-ready functionality.
+**Release boundary:** Pinned client source and compiled web assets are integrated at development-build level. They do **not** prove deployed, end-to-end authenticated file workflows, full GoreeCloud UI compliance, licensing/distribution sign-off, or production-ready functionality.
