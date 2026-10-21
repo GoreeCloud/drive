@@ -23,9 +23,18 @@ provided WebDAV collection. By default it makes **no mutations**:
 When the disposable mutation gate is explicitly enabled, the probe also
 performs a unique dot-prefixed test-file create, authenticated download with
 exact bytes, anonymous access denial, overwrite, exact bytes again, delete,
-and missing-after-delete check. It tries deletion after **every attempted PUT**,
-even when a server persists bytes but reports an error. It refuses to
-replace a pre-existing file with the generated fixture name.
+and missing-after-delete check. The initial upload sets
+`If-None-Match: *`, requiring the WebDAV server to atomically reject a
+concurrently created filename with HTTP 412. If another client wins the
+create race, the probe **does not delete** the competing client's file.
+A successful initial create must return HTTP 201; otherwise the probe fails.
+This atomicity guarantee depends on the actual server honoring the
+precondition, which offline fixtures cannot establish.
+
+The probe tries cleanup after ambiguous uploads, including a server that
+persists bytes but reports an error. It refuses to replace a pre-existing
+file with the generated fixture name. If cleanup fails, inspect the
+isolated test volume for the generated filename before disposal.
 
 ## Mandatory isolation controls
 
