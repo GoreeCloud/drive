@@ -190,6 +190,41 @@ var _ = Describe("Service", func() {
 
 			Expect(resp.Code).To(Equal(http.StatusRequestEntityTooLarge))
 		})
+		It("accepts normal JSON with trailing whitespace", func() {
+			kv := mocks.NewKeyValue(GinkgoT())
+			kv.EXPECT().Put(mock.Anything, "announcement", mock.Anything).Return(uint64(1), nil)
+
+			req := withUser(httptest.NewRequest(http.MethodPut, "/announcement", strings.NewReader(`{"bannerText":"hello"}`+"  \n\t")))
+			resp := httptest.NewRecorder()
+			newService(announcement.NewStore(kv), true).Set(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusNoContent))
+		})
+
+		It("rejects multiple JSON documents", func() {
+			req := withUser(httptest.NewRequest(http.MethodPut, "/announcement", strings.NewReader(`{"bannerText":"hello"}{"bannerText":"second"}`)))
+			resp := httptest.NewRecorder()
+			newService(announcement.NewStore(mocks.NewKeyValue(GinkgoT())), true).Set(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("rejects garbage following a valid JSON document", func() {
+			req := withUser(httptest.NewRequest(http.MethodPut, "/announcement", strings.NewReader(`{"bannerText":"hello"}--invalid--`)))
+			resp := httptest.NewRecorder()
+			newService(announcement.NewStore(mocks.NewKeyValue(GinkgoT())), true).Set(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusBadRequest))
+		})
+
+		It("enforces the size limit even when the excess is trailing whitespace", func() {
+			body := `{"bannerText":"hello"}` + strings.Repeat(" ", 300000)
+			req := withUser(httptest.NewRequest(http.MethodPut, "/announcement", strings.NewReader(body)))
+			resp := httptest.NewRecorder()
+			newService(announcement.NewStore(mocks.NewKeyValue(GinkgoT())), true).Set(resp, req)
+
+			Expect(resp.Code).To(Equal(http.StatusRequestEntityTooLarge))
+		})
 	})
 
 	Describe("Set with an empty banner text", func() {

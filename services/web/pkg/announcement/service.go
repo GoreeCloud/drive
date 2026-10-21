@@ -2,6 +2,7 @@ package announcement
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	gateway "github.com/cs3org/go-cs3apis/cs3/gateway/v1beta1"
@@ -164,8 +165,22 @@ func (s Service) Set(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Read exactly one JSON document. A valid leading object must not hide a
+	// second document, invalid trailing input, or a body that exceeds the cap
+	// after the first object.
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, _maxBodySize))
 	var body Announcement
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, _maxBodySize)).Decode(&body); err != nil {
+	if err := decoder.Decode(&body); err != nil {
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			w.WriteHeader(http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); err != io.EOF {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
 			w.WriteHeader(http.StatusRequestEntityTooLarge)
