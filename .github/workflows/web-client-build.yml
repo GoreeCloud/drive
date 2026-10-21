@@ -39,6 +39,8 @@ jobs:
         run: corepack enable
       - name: Rebuild embedded Files frontend from pinned AGPL source
         run: bash scripts/build_drive_web_client.sh
+      - name: Test inaccessible project-space navigation and not-found UX
+        run: cd web-client && pnpm exec vitest run --config ./tests/unit/config/vitest.config.ts packages/web-app-files/tests/unit/components/FilesList/NotFoundMessage.spec.ts packages/web-app-files/tests/unit/views/spaces/DriveRedirect.spec.ts --maxWorkers=2
       - name: Verify embedded output is generated from checked-in sources
         run: |
           git diff --exit-code -- services/web/assets/core

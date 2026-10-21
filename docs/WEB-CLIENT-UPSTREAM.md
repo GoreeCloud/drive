@@ -48,6 +48,26 @@ features **depend on properly configured GoreeCloud Drive backend services**;
 a built client alone is not verification of live operation or authorization.
 Maintaining these capabilities is a core GoreeCloud Fork requirement.
 
+### Project-space access-denied navigation backport
+
+The GoreeCloud Fork selectively includes the frontend fix from upstream web
+commit `a57e87e47065ef618ab81fe890b77f53b5d61cd2`. When a logged-in
+user opens a stale or inaccessible `project/...` space route that no longer
+resolves, the Files app shows its existing accessible **Resource not found**
+message with a link to the spaces overview; it does not silently redirect
+the user into their personal files. Guest contexts retain their share-list
+fallback and personal-drive aliases still resolve to the appropriate space.
+The route handler also transitions correctly when navigating away from an
+unknown project space.
+
+The companion upstream component regression tests are carried in the
+AGPL-3.0 source tree and run in GoreeCloud's independent web-client CI.
+This is a focused UX/access-state correction, **not** an API authorization
+policy change, claim of a fully authenticated deployment, or blanket upgrade
+of the pinned upstream web revision. The upstream watch retains the original
+baseline until a separate full-source review; revert the scoped source/asset
+commit and rebuild to roll back.
+
 The generated `index.html`, `oidc-callback.html`, application module
 bundles, CSS/fonts/icons, and PWA manifest are staged into the server's
 embedded `services/web/assets/core` directory. The Go web service serves
