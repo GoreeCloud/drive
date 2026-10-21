@@ -1,0 +1,9 @@
+{
+  "schema": "goreecloud.drive.upstream-watch.v1",
+  "upstream_repo": "opencloud-eu/web",
+  "reviewed_at_utc": "2026-10-21",
+  "source_sha": "954dbee3ac5b428d1f42c6eeaf9184484d1cda43",
+  "latest_release": "v8.1.0",
+  "advisories": [],
+  "interpretation": "Public GitHub security-advisory feed was empty when this snapshot was verified. This is not a vulnerability audit or a claim that any dependencies or deployed systems are secure."
+}

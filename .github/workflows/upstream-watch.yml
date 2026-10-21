@@ -1,4 +1,4 @@
-name: OpenCloud upstream and security watch
+name: OpenCloud server and web upstream security watch
 on:
   schedule:
     - cron: "29 8 * * *"
@@ -7,9 +7,13 @@ on:
     paths:
       - ".github/workflows/upstream-watch.yml"
       - "scripts/check_opencloud_upstream.py"
+      - "scripts/check_opencloud_web_upstream.py"
       - "scripts/tests/test_check_opencloud_upstream.py"
+      - "scripts/tests/test_check_opencloud_web_upstream.py"
       - "docs/UPSTREAM-WATCH.json"
+      - "docs/WEB-CLIENT-WATCH.json"
       - "docs/UPSTREAM.md"
+      - "docs/WEB-CLIENT-UPSTREAM.md"
 permissions:
   contents: read
 jobs:
@@ -18,10 +22,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - name: Offline comparator and baseline tests
-        run: python3 -m unittest discover -s scripts/tests -p 'test_check_opencloud_upstream.py' -v
-      - name: Read-only public upstream comparison
+      - name: Offline server and browser baseline tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_check_*upstream.py' -v
+      - name: Read-only server and web upstream comparisons
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/check_opencloud_upstream.py
+        run: |
+          failed=0
+          python3 scripts/check_opencloud_upstream.py || failed=1
+          python3 scripts/check_opencloud_web_upstream.py || failed=1
+          exit "$failed"
