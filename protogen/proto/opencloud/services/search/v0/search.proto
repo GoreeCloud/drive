@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package opencloud.services.search.v0;
+
+option go_package = "github.com/opencloud-eu/opencloud/protogen/gen/opencloud/service/search/v0";
+
+import "opencloud/messages/search/v0/search.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+import "google/api/field_behavior.proto";
+import "google/api/annotations.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/duration.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "OpenCloud search";
+    version: "1.0.0";
+    contact: {
+      name: "OpenCloud GmbH";
+      url: "https://github.com/opencloud-eu/opencloud";
+      email: "support@opencloud.eu";
+    };
+    license: {
+      name: "Apache-2.0";
+      url: "https://github.com/opencloud-eu/opencloud/blob/main/LICENSE";
+    };
+  };
+  schemes: HTTP;
+  schemes: HTTPS;
+  consumes: "application/json";
+  produces: "application/json";
+  external_docs: {
+    description: "Developer Manual";
+    url: "https://docs.opencloud.eu/services/search/";
+  };
+};
+
+service SearchProvider {
+	rpc Search(SearchRequest) returns (SearchResponse) {
+    option (google.api.http) = {
+        post: "/api/v0/search/search",
+        body: "*"
+    };
+  };
+  // IndexSpace (re)indexes one or all spaces. The response is streamed, sending
+  // progress information after each space has been indexed.
+  rpc IndexSpace(IndexSpaceRequest) returns (stream IndexSpaceResponse) {
+    option (google.api.http) = {
+        post: "/api/v0/search/index-space",
+        body: "*"
+    };
+  }
+}
+
+service IndexProvider {
+	rpc Search(SearchIndexRequest) returns (SearchIndexResponse) {
+    option (google.api.http) = {
+        post: "/api/v0/search/index/search",
+        body: "*"
+    };
+  };
+	// rpc Remove(RemoveRequest) returns (RemoveResponse) {};
+}
+
+message SearchRequest {
+  // Optional. The maximum number of entries to return in the response
+  int32 page_size = 1 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. A pagination token returned from a previous call to `Get`
+  // that indicates from where search should continue
+  string page_token = 2 [(google.api.field_behavior) = OPTIONAL];
+
+  string query = 3;
+  opencloud.messages.search.v0.Reference ref = 4 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message SearchResponse {
+  repeated opencloud.messages.search.v0.Match matches = 1;
+
+  // Token to retrieve the next page of results, or empty if there are no
+  // more results in the list
+  string next_page_token = 2;
+  int32 total_matches = 3;
+}
+
+message SearchIndexRequest {
+  // Optional. The maximum number of entries to return in the response
+  int32 page_size = 1 [(google.api.field_behavior) = OPTIONAL];
+
+  // Optional. A pagination token returned from a previous call to `Get`
+  // that indicates from where search should continue
+  string page_token = 2 [(google.api.field_behavior) = OPTIONAL];
+
+	string query = 3;
+  opencloud.messages.search.v0.Reference ref = 4 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message SearchIndexResponse {
+  repeated opencloud.messages.search.v0.Match matches = 1;
+
+  // Token to retrieve the next page of results, or empty if there are no
+  // more results in the list
+  string next_page_token = 2;
+  int32 total_matches = 3;
+}
+
+message IndexSpaceRequest {
+  string space_id = 1;
+  string user_id = 2;
+  bool force_reindex = 3;
+  int32 concurrency = 4 [(google.api.field_behavior) = OPTIONAL];
+}
+
+message IndexSpaceResponse {
+  enum Status {
+    STATUS_UNKNOWN = 0;
+    // The space has been indexed successfully.
+    STATUS_SUCCESS = 1;
+    // The space has been skipped because it is disabled. It will be indexed
+    // once it gets enabled again.
+    STATUS_SKIPPED = 2;
+    // Indexing the space failed, see the error field for details.
+    STATUS_ERROR = 3;
+  }
+
+  // The id of the space that has just been indexed.
+  string space_id = 1;
+  // The duration it took to index this space.
+  google.protobuf.Duration space_duration = 2;
+  // The number of spaces that have been indexed so far.
+  int64 indexed_spaces = 3;
+  // The total number of spaces that are being indexed.
+  int64 total_spaces = 4;
+  // Contains an error message in case indexing this particular space failed.
+  string error = 5;
+  // The outcome of indexing this particular space.
+  Status status = 6;
+}

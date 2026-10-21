@@ -1,0 +1,40 @@
+version: v1
+plugins:
+  - name: go
+    path: ../../.bingo/protoc-gen-go
+    out: ../gen/
+    opt:
+      - paths=source_relative
+
+  - name: go-grpc
+    path: ../../.bingo/protoc-gen-go-grpc
+    out: ../gen/
+    opt:
+      - paths=source_relative
+
+  - name: micro
+    path: ../../.bingo/protoc-gen-micro
+    out: ../gen/
+    opt:
+      - paths=source_relative
+
+  - name: microweb
+    path: ../../.bingo/protoc-gen-microweb
+    out: ../gen/
+    opt:
+      - paths=source_relative
+      - "ignore_packages=\
+         opencloud.services.thumbnails.v0;\
+         opencloud.messages.thumbnails.v0;\
+         opencloud.services.store.v0;\
+         opencloud.messages.store.v0;\
+         opencloud.services.eventhistory.v0;\
+         opencloud.messages.eventhistory.v0;\
+         opencloud.services.policies.v0;\
+         opencloud.messages.policies.v0;\
+         opencloud.services.search.v0;\
+         opencloud.messages.search.v0"
+
+  - name: openapiv2
+    path: ../../.bingo/protoc-gen-openapiv2
+    out: ../gen/

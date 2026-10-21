@@ -1,0 +1,110 @@
+package defaults
+
+import (
+	"time"
+
+	"github.com/opencloud-eu/opencloud/pkg/shared"
+	"github.com/opencloud-eu/opencloud/pkg/structs"
+	"github.com/opencloud-eu/opencloud/services/groups/pkg/config"
+)
+
+// FullDefaultConfig returns a fully initialized default configuration
+func FullDefaultConfig() *config.Config {
+	cfg := DefaultConfig()
+	EnsureDefaults(cfg)
+	Sanitize(cfg)
+	return cfg
+}
+
+// DefaultConfig returns a basic default configuration
+func DefaultConfig() *config.Config {
+	return &config.Config{
+		Debug: config.Debug{
+			Addr:   "127.0.0.1:9161",
+			Token:  "",
+			Pprof:  false,
+			Zpages: false,
+		},
+		GRPC: config.GRPCConfig{
+			Addr:      "127.0.0.1:9160",
+			Namespace: "eu.opencloud.api",
+			Protocol:  "tcp",
+		},
+		Service: config.Service{
+			Name: "groups",
+		},
+		Reva:   shared.DefaultRevaConfig(),
+		Driver: "ldap",
+		Drivers: config.Drivers{
+			LDAP: config.LDAPDriver{
+				URI:                      "ldap://localhost:9236",
+				Insecure:                 false,
+				UserBaseDN:               "ou=users,o=libregraph-idm",
+				GroupBaseDN:              "ou=groups,o=libregraph-idm",
+				UserScope:                "sub",
+				GroupScope:               "sub",
+				GroupSubstringFilterType: "any",
+				UserFilter:               "",
+				GroupFilter:              "",
+				UserObjectClass:          "inetOrgPerson",
+				GroupObjectClass:         "groupOfNames",
+				BindDN:                   "uid=reva,ou=sysusers,o=libregraph-idm",
+				IDP:                      "https://localhost:9200",
+				UserSchema: config.LDAPUserSchema{
+					ID:          "openCloudUUID",
+					Mail:        "mail",
+					DisplayName: "displayname",
+					Username:    "uid",
+				},
+				GroupSchema: config.LDAPGroupSchema{
+					ID:          "openCloudUUID",
+					Mail:        "mail",
+					DisplayName: "cn",
+					Groupname:   "cn",
+					Member:      "member",
+				},
+				LookupCacheTTL: 10 * time.Second,
+			},
+			OwnCloudSQL: config.OwnCloudSQLDriver{
+				DBUsername:         "owncloud",
+				DBPassword:         "",
+				DBHost:             "mysql",
+				DBPort:             3306,
+				DBName:             "owncloud",
+				IDP:                "https://localhost:9200",
+				Nobody:             90,
+				JoinUsername:       false,
+				JoinOwnCloudUUID:   false,
+				EnableMedialSearch: false,
+			},
+		},
+	}
+}
+
+// EnsureDefaults adds default values to the configuration if they are not set yet
+func EnsureDefaults(cfg *config.Config) {
+	if cfg.LogLevel == "" {
+		cfg.LogLevel = "error"
+	}
+
+	if cfg.Reva == nil && cfg.Commons != nil {
+		cfg.Reva = structs.CopyOrZeroValue(cfg.Commons.Reva)
+	}
+
+	if cfg.TokenManager == nil && cfg.Commons != nil && cfg.Commons.TokenManager != nil {
+		cfg.TokenManager = &config.TokenManager{
+			JWTSecret: cfg.Commons.TokenManager.JWTSecret,
+		}
+	} else if cfg.TokenManager == nil {
+		cfg.TokenManager = &config.TokenManager{}
+	}
+
+	if cfg.GRPC.TLS == nil && cfg.Commons != nil {
+		cfg.GRPC.TLS = structs.CopyOrZeroValue(cfg.Commons.GRPCServiceTLS)
+	}
+}
+
+// Sanitize sanitized the configuration
+func Sanitize(cfg *config.Config) {
+	// nothing to sanitize here atm
+}

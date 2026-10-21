@@ -1,0 +1,42 @@
+package config
+
+import (
+	"context"
+	"time"
+
+	"github.com/opencloud-eu/opencloud/pkg/shared"
+	"go-micro.dev/v4/client"
+)
+
+// Config combines all available configuration parts.
+type Config struct {
+	Commons *shared.Commons `yaml:"-"` // don't use this directly as configuration for a service
+
+	Service Service `yaml:"-"`
+
+	LogLevel string `yaml:"loglevel" env:"OC_LOG_LEVEL;OCS_LOG_LEVEL" desc:"The log level. Valid values are: 'panic', 'fatal', 'error', 'warn', 'info', 'debug', 'trace'." introductionVersion:"1.0.0"`
+	Debug    Debug  `yaml:"debug"`
+
+	HTTP HTTP `yaml:"http"`
+
+	GRPCClientTLS *shared.GRPCClientTLS `yaml:"grpc_client_tls"`
+	GrpcClient    client.Client         `yaml:"-"`
+
+	SigningKeys *SigningKeys `yaml:"signing_keys"`
+
+	TokenManager *TokenManager `yaml:"token_manager"`
+
+	Context context.Context `yaml:"-"`
+}
+
+// SigningKeys is a store configuration.
+type SigningKeys struct {
+	Store                string        `yaml:"store" env:"OC_CACHE_STORE;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE" desc:"The type of the signing key store. Supported values are: 'redis-sentinel' and 'nats-js-kv'. See the text description for details." introductionVersion:"1.0.0"`
+	Nodes                []string      `yaml:"addresses" env:"OC_CACHE_STORE_NODES;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_NODES" desc:"A list of nodes to access the configured store. Note that the behaviour how nodes are used is dependent on the library of the configured store. See the Environment Variable Types description for more details." introductionVersion:"1.0.0"`
+	TTL                  time.Duration `yaml:"ttl" env:"OC_CACHE_TTL;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_TTL" desc:"Default time to live for signing keys. See the Environment Variable Types description for more details." introductionVersion:"1.0.0"`
+	AuthUsername         string        `yaml:"username" env:"OC_CACHE_AUTH_USERNAME;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_AUTH_USERNAME" desc:"The username to authenticate with the store. Only applies when store type 'nats-js-kv' is configured." introductionVersion:"1.0.0"`
+	AuthPassword         string        `yaml:"password" env:"OC_CACHE_AUTH_PASSWORD;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_AUTH_PASSWORD" desc:"The password to authenticate with the store. Only applies when store type 'nats-js-kv' is configured." introductionVersion:"1.0.0"`
+	EnableTLS            bool          `yaml:"enable_tls" env:"OC_CACHE_ENABLE_TLS;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_ENABLE_TLS" desc:"Enable TLS for the connection to file metadata cache." introductionVersion:"7.3.0"`
+	TLSInsecure          bool          `yaml:"tls_insecure" env:"OC_INSECURE;OC_CACHE_TLS_INSECURE;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_TLS_INSECURE" desc:"Whether to verify the server TLS certificates." introductionVersion:"7.3.0"`
+	TLSRootCACertificate string        `yaml:"tls_root_ca_certificate" env:"OC_CACHE_TLS_ROOT_CA_CERTIFICATE;OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_TLS_ROOT_CA_CERTIFICATE" desc:"The root CA certificate used to validate the server's TLS certificate. If provided OCS_PRESIGNEDURL_SIGNING_KEYS_STORE_TLS_INSECURE will be seen as false." introductionVersion:"7.3.0"`
+}

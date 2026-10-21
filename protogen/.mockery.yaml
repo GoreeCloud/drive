@@ -1,0 +1,24 @@
+# maintain v2 separate mocks dir
+dir: "{{.InterfaceDir}}/mocks"
+structname: "{{.InterfaceName}}"
+filename: "{{.InterfaceName | snakecase }}.go"
+pkgname: mocks
+
+template: testify
+include-auto-generated: true
+packages:
+  github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/eventhistory/v0:
+    interfaces:
+      EventHistoryService: {}
+  github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/policies/v0:
+    interfaces:
+      PoliciesProviderService: {}
+  github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/search/v0:
+    interfaces:
+      SearchProviderService: {}
+  github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/settings/v0:
+    interfaces:
+      ValueService: {}
+  github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/thumbnails/v0:
+    interfaces:
+      ThumbnailService: {}

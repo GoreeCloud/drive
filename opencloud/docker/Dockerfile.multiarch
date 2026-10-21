@@ -1,0 +1,64 @@
+FROM quay.io/opencloudeu/golang-ci:1.26 AS build
+ARG TARGETOS
+ARG TARGETARCH
+ARG VERSION
+ARG STRING
+ARG EDITION="dev"
+ARG SRCDIR
+
+WORKDIR /build
+RUN --mount=type=bind,target=/build,rw \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache \
+    GOOS="${TARGETOS:-linux}" GOARCH="${TARGETARCH:-amd64}" ; \
+    make -C ${SRCDIR:-.}/opencloud release-linux-docker-${TARGETARCH} \
+        ENABLE_VIPS=true DIST=/dist \
+        VERSION="${VERSION}" EDITION="${EDITION}" \
+        ${STRING:+STRING="${STRING}"}
+
+FROM alpine:3.24
+ARG VERSION
+ARG REVISION
+ARG TARGETOS
+ARG TARGETARCH
+
+RUN apk add --no-cache attr bash ca-certificates curl imagemagick \
+                       inotify-tools libc6-compat mailcap tree vips \
+		       vips-magick patch && \
+    echo 'hosts: files dns' >| /etc/nsswitch.conf
+
+LABEL maintainer="openCloud GmbH <devops@opencloud.eu>" \
+  org.opencontainers.image.title="OpenCloud" \
+  org.opencontainers.image.vendor="OpenCloud GmbH" \
+  org.opencontainers.image.authors="OpenCloud GmbH" \
+  org.opencontainers.image.description="OpenCloud is a modern file-sync and share platform" \
+  org.opencontainers.image.licenses="Apache-2.0" \
+  org.opencontainers.image.documentation="https://github.com/opencloud-eu/opencloud" \
+  org.opencontainers.image.url="https://hub.docker.com/r/opencloud-eu/opencloud" \
+  org.opencontainers.image.source="https://github.com/opencloud-eu/opencloud" \
+  org.opencontainers.image.version="${VERSION}" \
+  org.opencontainers.image.revision="${REVISION}"
+
+RUN addgroup -g 1000 -S opencloud-group && \
+  adduser -S --ingroup opencloud-group --uid 1000 opencloud-user --home /var/lib/opencloud
+
+RUN mkdir -p /var/lib/opencloud && \
+# Pre-create the web directory to avoid permission issues
+ mkdir -p /var/lib/opencloud/web/assets/apps && \
+ chown -R opencloud-user:opencloud-group /var/lib/opencloud && \
+ chmod -R 751 /var/lib/opencloud && \
+ mkdir -p /etc/opencloud && \
+ chown -R opencloud-user:opencloud-group /etc/opencloud && \
+ chmod -R 751 /etc/opencloud
+
+VOLUME [ "/var/lib/opencloud", "/etc/opencloud" ]
+WORKDIR /var/lib/opencloud
+
+USER 1000
+
+EXPOSE 9200/tcp
+
+ENTRYPOINT ["/usr/bin/opencloud"]
+CMD ["server"]
+
+COPY --from=build /dist/binaries/opencloud-linux-${TARGETARCH} /usr/bin/opencloud

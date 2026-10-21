@@ -1,0 +1,13 @@
+# maintain v2 separate mocks dir
+dir: "{{.InterfaceDir}}/mocks"
+structname: "{{.InterfaceName}}"
+filename: "{{.InterfaceName | snakecase }}.go"
+pkgname: mocks
+
+template: testify
+packages:
+  github.com/opencloud-eu/opencloud/pkg/keycloak:
+    config:
+      dir: pkg/backends/keycloak/mocks
+    interfaces:
+      Client: {}

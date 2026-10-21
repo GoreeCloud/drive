@@ -1,0 +1,462 @@
+package command
+
+import (
+	"context"
+	"crypto/tls"
+	"fmt"
+	"net/http"
+	"os/signal"
+	"time"
+
+	gateway "github.com/cs3org/go-cs3apis/cs3/gateway/v1beta1"
+	"github.com/justinas/alice"
+
+	"github.com/opencloud-eu/reva/v2/pkg/events"
+	"github.com/opencloud-eu/reva/v2/pkg/events/stream"
+	"github.com/opencloud-eu/reva/v2/pkg/rgrpc/todo/pool"
+	"github.com/opencloud-eu/reva/v2/pkg/signedurl"
+	"github.com/opencloud-eu/reva/v2/pkg/store"
+
+	"github.com/opencloud-eu/opencloud/pkg/config/configlog"
+	"github.com/opencloud-eu/opencloud/pkg/generators"
+	"github.com/opencloud-eu/opencloud/pkg/log"
+	pkgmiddleware "github.com/opencloud-eu/opencloud/pkg/middleware"
+	"github.com/opencloud-eu/opencloud/pkg/oidc"
+	"github.com/opencloud-eu/opencloud/pkg/registry"
+	"github.com/opencloud-eu/opencloud/pkg/runner"
+	"github.com/opencloud-eu/opencloud/pkg/service/grpc"
+	"github.com/opencloud-eu/opencloud/pkg/tracing"
+	policiessvc "github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/policies/v0"
+	settingssvc "github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/settings/v0"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/config"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/config/parser"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/metrics"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/middleware"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/proxy"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/router"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/server/debug"
+	proxyHTTP "github.com/opencloud-eu/opencloud/services/proxy/pkg/server/http"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/staticroutes"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/user/backend"
+	"github.com/opencloud-eu/opencloud/services/proxy/pkg/userroles"
+
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/spf13/cobra"
+	"go-micro.dev/v4/selector"
+	microstore "go-micro.dev/v4/store"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
+)
+
+// Server is the entrypoint for the server command.
+func Server(cfg *config.Config) *cobra.Command {
+	return &cobra.Command{
+		Use:   "server",
+		Short: fmt.Sprintf("start the %s service without runtime (unsupervised mode)", cfg.Service.Name),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return configlog.ReturnFatal(parser.ParseConfig(cfg))
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			userInfoCache := store.Create(
+				store.Store(cfg.OIDC.UserinfoCache.Store),
+				store.TTL(cfg.OIDC.UserinfoCache.TTL),
+				microstore.Nodes(cfg.OIDC.UserinfoCache.Nodes...),
+				microstore.Database(cfg.OIDC.UserinfoCache.Database),
+				microstore.Table(cfg.OIDC.UserinfoCache.Table),
+				store.DisablePersistence(cfg.OIDC.UserinfoCache.DisablePersistence),
+				store.Authentication(cfg.OIDC.UserinfoCache.AuthUsername, cfg.OIDC.UserinfoCache.AuthPassword),
+				store.TLSEnabled(cfg.OIDC.UserinfoCache.EnableTLS),
+				store.TLSInsecure(cfg.OIDC.UserinfoCache.TLSInsecure),
+				store.TLSRootCA(cfg.OIDC.UserinfoCache.TLSRootCACertificate),
+			)
+
+			signingKeyStore := store.Create(
+				store.Store(cfg.PreSignedURL.SigningKeys.Store),
+				store.TTL(cfg.PreSignedURL.SigningKeys.TTL),
+				microstore.Nodes(cfg.PreSignedURL.SigningKeys.Nodes...),
+				microstore.Database("proxy"),
+				microstore.Table("signing-keys"),
+				store.DisablePersistence(cfg.PreSignedURL.SigningKeys.DisablePersistence),
+				store.Authentication(cfg.PreSignedURL.SigningKeys.AuthUsername, cfg.PreSignedURL.SigningKeys.AuthPassword),
+				store.TLSEnabled(cfg.PreSignedURL.SigningKeys.EnableTLS),
+				store.TLSInsecure(cfg.PreSignedURL.SigningKeys.TLSInsecure),
+				store.TLSRootCA(cfg.PreSignedURL.SigningKeys.TLSRootCACertificate),
+			)
+
+			logger := log.Configure(cfg.Service.Name, cfg.Commons, cfg.LogLevel)
+			traceProvider, err := tracing.GetTraceProvider(cmd.Context(), cfg.Commons.TracesExporter, cfg.Service.Name)
+			if err != nil {
+				return err
+			}
+			cfg.GrpcClient, err = grpc.NewClient(
+				append(
+					grpc.GetClientOptions(cfg.GRPCClientTLS),
+					grpc.WithTraceProvider(traceProvider))...)
+			if err != nil {
+				return err
+			}
+
+			oidcHTTPClient := &http.Client{
+				Transport: &http.Transport{
+					TLSClientConfig: &tls.Config{
+						MinVersion:         tls.VersionTLS12,
+						InsecureSkipVerify: cfg.OIDC.Insecure, //nolint:gosec
+					},
+					DisableKeepAlives: true,
+					Proxy:             http.ProxyFromEnvironment,
+				},
+				Timeout: time.Second * 10,
+			}
+
+			oidcClient, err := oidc.NewOIDCClient(
+				oidc.WithAccessTokenVerifyMethod(cfg.OIDC.AccessTokenVerifyMethod),
+				oidc.WithLogger(logger),
+				oidc.WithHTTPClient(oidcHTTPClient),
+				oidc.WithOidcIssuer(cfg.OIDC.Issuer),
+				oidc.WithJWKSOptions(cfg.OIDC.JWKS),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to initialize OIDC client: %w", err)
+			}
+
+			var cancel context.CancelFunc
+			if cfg.Context == nil {
+				cfg.Context, cancel = signal.NotifyContext(context.Background(), runner.StopSignals...)
+				defer cancel()
+			}
+
+			m, err := metrics.New(func(yield func(config.Route) bool) {
+				// provide the metrics with an iterator that gives a list of the routes,
+				// to allow the metrics to initialize empty collectors accordingly
+				for _, pol := range cfg.Policies {
+					for _, r := range pol.Routes {
+						if !yield(r) {
+							return
+						}
+					}
+				}
+			}, &logger)
+			if err != nil {
+				return fmt.Errorf("failed to initialize metrics in reverse proxy: %w", err)
+			}
+
+			rp, err := proxy.NewMultiHostReverseProxy(
+				proxy.Logger(logger),
+				proxy.Config(cfg),
+			)
+			if err != nil {
+				return fmt.Errorf("failed to initialize reverse proxy: %w", err)
+			}
+
+			reg := registry.GetRegistry()
+
+			gatewaySelector, err := pool.GatewaySelector(
+				cfg.Reva.Address,
+				append(
+					cfg.Reva.GetRevaOptions(),
+					pool.WithRegistry(reg),
+					pool.WithTracerProvider(traceProvider),
+				)...)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("Failed to get gateway selector")
+			}
+
+			serviceSelector := selector.NewSelector(selector.Registry(reg))
+
+			var userProvider backend.UserBackend
+			switch cfg.AccountBackend {
+			case "cs3":
+				userProvider = backend.NewCS3UserBackend(
+					backend.WithLogger(logger),
+					backend.WithRevaGatewaySelector(gatewaySelector),
+					backend.WithSelector(serviceSelector),
+					backend.WithMachineAuthAPIKey(cfg.MachineAuthAPIKey),
+					backend.WithOIDCissuer(cfg.OIDC.Issuer),
+					backend.WithServiceAccount(cfg.ServiceAccount),
+					backend.WithAutoProvisionClaims(cfg.AutoProvisionClaims),
+				)
+			default:
+				logger.Fatal().Msgf("Invalid accounts backend type '%s'", cfg.AccountBackend)
+			}
+
+			var publisher events.Stream
+			if cfg.Events.Endpoint != "" {
+				var err error
+				connName := generators.GenerateConnectionName(cfg.Service.Name, generators.NTypeBus)
+				publisher, err = stream.NatsFromConfig(connName, false, stream.NatsConfig(cfg.Events))
+				if err != nil {
+					logger.Error().
+						Err(err).
+						Msg("Error initializing events publisher")
+					return fmt.Errorf("could not initialize events publisher %w", err)
+				}
+			}
+
+			lh := staticroutes.StaticRouteHandler{
+				Prefix:          cfg.HTTP.Root,
+				UserInfoCache:   userInfoCache,
+				Logger:          logger,
+				Config:          *cfg,
+				OidcClient:      oidcClient,
+				OidcHttpClient:  oidcHTTPClient,
+				Proxy:           rp,
+				EventsPublisher: publisher,
+				UserProvider:    userProvider,
+			}
+			if err != nil {
+				return fmt.Errorf("failed to initialize reverse proxy: %w", err)
+			}
+
+			gr := runner.NewGroup()
+			{
+				middlewares, err := loadMiddlewares(logger, cfg, userInfoCache, signingKeyStore, traceProvider, *m, userProvider, publisher, gatewaySelector, serviceSelector)
+				if err != nil {
+					return err
+				}
+
+				server, err := proxyHTTP.Server(
+					proxyHTTP.Handler(lh.Handler()),
+					proxyHTTP.Logger(logger),
+					proxyHTTP.Context(cfg.Context),
+					proxyHTTP.Config(cfg),
+					proxyHTTP.Metrics(m),
+					proxyHTTP.Middlewares(middlewares),
+				)
+				if err != nil {
+					logger.Error().
+						Err(err).
+						Str("server", "http").
+						Msg("Failed to initialize server")
+
+					return err
+				}
+
+				gr.Add(runner.NewGoMicroHttpServerRunner(cfg.Service.Name+".http", server))
+			}
+
+			{
+				debugServer, err := debug.Server(
+					debug.Logger(logger),
+					debug.Context(cfg.Context),
+					debug.Config(cfg),
+				)
+				if err != nil {
+					logger.Error().Err(err).Str("server", "debug").Msg("Failed to initialize server")
+					return err
+				}
+
+				gr.Add(runner.NewGolangHttpServerRunner(cfg.Service.Name+".debug", debugServer))
+			}
+
+			grResults := gr.Run(cfg.Context)
+
+			// return the first non-nil error found in the results
+			for _, grResult := range grResults {
+				if grResult.RunnerError != nil {
+					return grResult.RunnerError
+				}
+			}
+			return nil
+		},
+	}
+}
+
+func newOIDCAuthenticator(logger log.Logger, cfg *config.Config, userInfoCache microstore.Store, httpClient *http.Client) (*middleware.OIDCAuthenticator, error) {
+	oidcClient, err := oidc.NewOIDCClient(
+		oidc.WithAccessTokenVerifyMethod(cfg.OIDC.AccessTokenVerifyMethod),
+		oidc.WithAccessTokenAudiences(cfg.OIDC.Audiences),
+		oidc.WithLogger(logger),
+		oidc.WithHTTPClient(httpClient),
+		oidc.WithOidcIssuer(cfg.OIDC.Issuer),
+		oidc.WithJWKSOptions(cfg.OIDC.JWKS),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize OIDC authenticator: %w", err)
+	}
+
+	if cfg.OIDC.Issuer != "" && cfg.OIDC.AccessTokenVerifyMethod != config.AccessTokenVerificationNone && len(cfg.OIDC.Audiences) == 0 {
+		logger.Warn().Msg("OIDC access token audience validation is disabled. Configure PROXY_OIDC_AUDIENCES to enable it; this is recommended for production.")
+	}
+
+	return middleware.NewOIDCAuthenticator(
+		middleware.Logger(logger),
+		middleware.UserInfoCache(userInfoCache),
+		middleware.DefaultAccessTokenTTL(cfg.OIDC.UserinfoCache.TTL),
+		middleware.HTTPClient(httpClient),
+		middleware.OIDCIss(cfg.OIDC.Issuer),
+		middleware.AccessTokenVerifyMethod(cfg.OIDC.AccessTokenVerifyMethod),
+		middleware.OIDCClient(oidcClient),
+		middleware.SkipUserInfo(cfg.OIDC.SkipUserInfo),
+	), nil
+}
+
+func loadMiddlewares(logger log.Logger, cfg *config.Config,
+	userInfoCache, signingKeyStore microstore.Store,
+	traceProvider trace.TracerProvider, metrics metrics.Metrics,
+	userProvider backend.UserBackend, publisher events.Publisher,
+	gatewaySelector pool.Selectable[gateway.GatewayAPIClient], serviceSelector selector.Selector) (alice.Chain, error) {
+
+	rolesClient := settingssvc.NewRoleService("eu.opencloud.api.settings", cfg.GrpcClient)
+	policiesProviderClient := policiessvc.NewPoliciesProviderService("eu.opencloud.api.policies", cfg.GrpcClient)
+
+	var roleAssigner userroles.UserRoleAssigner
+	switch cfg.RoleAssignment.Driver {
+	case "default":
+		roleAssigner = userroles.NewDefaultRoleAssigner(
+			userroles.WithRoleService(rolesClient),
+			userroles.WithLogger(logger),
+		)
+	case "oidc":
+		roleAssigner = userroles.NewOIDCRoleAssigner(
+			userroles.WithRoleService(rolesClient),
+			userroles.WithLogger(logger),
+			userroles.WithRolesClaim(cfg.RoleAssignment.OIDCRoleMapper.RoleClaim),
+			userroles.WithRoleMapping(cfg.RoleAssignment.OIDCRoleMapper.RolesMap),
+			userroles.WithRevaGatewaySelector(gatewaySelector),
+			userroles.WithServiceAccount(cfg.ServiceAccount),
+		)
+	default:
+		logger.Fatal().Msgf("Invalid role assignment driver '%s'", cfg.RoleAssignment.Driver)
+	}
+
+	oidcHTTPClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				MinVersion:         tls.VersionTLS12,
+				InsecureSkipVerify: cfg.OIDC.Insecure, //nolint:gosec
+			},
+			DisableKeepAlives: true,
+			Proxy:             http.ProxyFromEnvironment,
+		},
+		Timeout: time.Second * 10,
+	}
+
+	var authenticators []middleware.Authenticator
+
+	if cfg.EnableBasicAuth {
+		logger.Warn().Msg("basic auth enabled, use only for testing or development")
+		authenticators = append(authenticators, middleware.BasicAuthenticator{
+			Logger:       logger,
+			UserProvider: userProvider,
+		})
+	}
+
+	if cfg.AuthMiddleware.AllowAppAuth {
+		authenticators = append(authenticators, middleware.AppAuthAuthenticator{
+			Logger:              logger,
+			RevaGatewaySelector: gatewaySelector,
+			UserRoleAssigner:    roleAssigner,
+		})
+	}
+	oidcAuthenticator, err := newOIDCAuthenticator(logger, cfg, userInfoCache, oidcHTTPClient)
+	if err != nil {
+		return alice.Chain{}, err
+	}
+	authenticators = append(authenticators, oidcAuthenticator)
+
+	if cfg.Commons != nil && cfg.Commons.EnableGuestLinks {
+		authenticators = append(authenticators, &middleware.GuestLinkAuthenticator{
+			Logger:              logger,
+			RevaGatewaySelector: gatewaySelector,
+			Config: middleware.GuestLinkAuthConfig{
+				CookieName: cfg.GuestLinkAuth.CookieName,
+			},
+		})
+	}
+
+	authenticators = append(authenticators, middleware.PublicShareAuthenticator{
+		Logger:              logger,
+		RevaGatewaySelector: gatewaySelector,
+	})
+
+	signURLVerifier, err := signedurl.NewJWTSignedURL(signedurl.WithSecret(cfg.Commons.URLSigningSecret))
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to initialize signed URL configuration.")
+	}
+
+	authenticators = append(authenticators, middleware.SignedURLAuthenticator{
+		Logger:             logger,
+		PreSignedURLConfig: cfg.PreSignedURL,
+		UserProvider:       userProvider,
+		UserRoleAssigner:   roleAssigner,
+		Store:              signingKeyStore,
+		Now:                time.Now,
+		URLVerifier:        signURLVerifier,
+	})
+
+	cspConfig, err := middleware.LoadCSPConfig(cfg)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to load CSP configuration.")
+	}
+
+	return alice.New(
+		chimiddleware.RealIP,
+		chimiddleware.RequestID,
+
+		// 1. Logging & Tracing first
+		otelhttp.NewMiddleware("proxy",
+			otelhttp.WithTracerProvider(traceProvider),
+			otelhttp.WithSpanNameFormatter(func(name string, r *http.Request) string {
+				return fmt.Sprintf("%s %s", r.Method, r.URL.Path)
+			}),
+		),
+		middleware.Tracer(traceProvider),
+		pkgmiddleware.TraceContext,
+		middleware.AccessLog(logger),
+		middleware.ContextLogger(logger),
+		middleware.HTTPSRedirect, // redirect to https if enabled
+
+		// 2. Rewrite datagateway url tokens to dataprovider endpoint and
+		// rewrite Location headers in TUS responses to signed datagateway urls
+		middleware.NewDataGatewayMiddleware("/data", cfg.TransferSecret, cfg.TransferTimeout).Handler,
+
+		middleware.Security(cspConfig),
+
+		// 3. Routing & Authentication
+		router.Middleware(serviceSelector, cfg.PolicySelector, cfg.Policies, metrics.RoutingFailed, logger),
+		middleware.Instrumenter(metrics), // must come after the router middleware as it needs to know the routeInfo for detailed metrics
+		middleware.Authentication(
+			authenticators,
+			middleware.CredentialsByUserAgent(cfg.AuthMiddleware.CredentialsByUserAgent),
+			middleware.Logger(logger),
+			middleware.OIDCIss(cfg.OIDC.Issuer),
+			middleware.EnableBasicAuth(cfg.EnableBasicAuth || cfg.AuthMiddleware.AllowAppAuth),
+			middleware.TraceProvider(traceProvider),
+		),
+		middleware.AccountResolver(
+			middleware.Logger(logger),
+			middleware.TraceProvider(traceProvider),
+			middleware.UserProvider(userProvider),
+			middleware.UserRoleAssigner(roleAssigner),
+			middleware.SkipUserInfo(cfg.OIDC.SkipUserInfo),
+			middleware.UserOIDCClaim(cfg.UserOIDCClaim),
+			middleware.UserCS3Claim(cfg.UserCS3Claim),
+			middleware.TenantOIDCClaim(cfg.TenantOIDCClaim),
+			middleware.TenantIDMappingEnabled(cfg.TenantIDMappingEnabled),
+			middleware.ServiceAccount(cfg.ServiceAccount),
+			middleware.WithRevaGatewaySelector(gatewaySelector),
+			middleware.AutoprovisionAccounts(cfg.AutoprovisionAccounts),
+			middleware.MultiTenantEnabled(cfg.Commons.MultiTenantEnabled),
+			middleware.EventsPublisher(publisher),
+		),
+		middleware.SelectorCookie(
+			middleware.Logger(logger),
+			middleware.TraceProvider(traceProvider),
+			middleware.PolicySelectorConfig(*cfg.PolicySelector),
+		),
+		middleware.Policies(
+			cfg.PoliciesMiddleware.Query,
+			middleware.Logger(logger),
+			middleware.TraceProvider(traceProvider),
+			middleware.WithRevaGatewaySelector(gatewaySelector),
+			middleware.PoliciesProviderService(policiesProviderClient),
+		),
+		// finally, trigger home creation when a user logs in
+		middleware.CreateHome(
+			middleware.Logger(logger),
+			middleware.TraceProvider(traceProvider),
+			middleware.WithRevaGatewaySelector(gatewaySelector),
+			middleware.RoleQuotas(cfg.RoleQuotas),
+		),
+	), nil
+}

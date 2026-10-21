@@ -1,0 +1,10 @@
+services:
+  start_email:
+    image: dadarek/wait-for-dependencies
+    depends_on:
+      - email
+    command: email:9000
+  email:
+    image: inbucket/inbucket
+    ports:
+      - '9000:9000'

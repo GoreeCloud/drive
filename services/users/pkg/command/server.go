@@ -1,0 +1,110 @@
+package command
+
+import (
+	"context"
+	"fmt"
+	"os/signal"
+
+	"github.com/opencloud-eu/opencloud/pkg/config/configlog"
+	"github.com/opencloud-eu/opencloud/pkg/ldap"
+	"github.com/opencloud-eu/opencloud/pkg/log"
+	"github.com/opencloud-eu/opencloud/pkg/registry"
+	"github.com/opencloud-eu/opencloud/pkg/runner"
+	"github.com/opencloud-eu/opencloud/pkg/tracing"
+	"github.com/opencloud-eu/opencloud/pkg/version"
+	"github.com/opencloud-eu/opencloud/services/users/pkg/config"
+	"github.com/opencloud-eu/opencloud/services/users/pkg/config/parser"
+	"github.com/opencloud-eu/opencloud/services/users/pkg/revaconfig"
+	"github.com/opencloud-eu/opencloud/services/users/pkg/server/debug"
+	"github.com/opencloud-eu/reva/v2/cmd/revad/runtime"
+
+	"github.com/spf13/cobra"
+)
+
+// Server is the entry point for the server command.
+func Server(cfg *config.Config) *cobra.Command {
+	return &cobra.Command{
+		Use:   "server",
+		Short: fmt.Sprintf("start the %s service without runtime (unsupervised mode)", cfg.Service.Name),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return configlog.ReturnFatal(parser.ParseConfig(cfg))
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger := log.Configure(cfg.Service.Name, cfg.Commons, cfg.LogLevel)
+			traceProvider, err := tracing.GetTraceProvider(cmd.Context(), cfg.Commons.TracesExporter, cfg.Service.Name)
+			if err != nil {
+				return err
+			}
+
+			// the reva runtime calls os.Exit in the case of a failure and there is no way for the OpenCloud
+			// runtime to catch it and restart a reva service. Therefore we need to ensure the service has
+			// everything it needs, before starting the service.
+			// In this case: CA certificates
+			if cfg.Driver == "ldap" {
+				ldapCfg := cfg.Drivers.LDAP
+				if err := ldap.WaitForCA(logger, ldapCfg.Insecure, ldapCfg.CACert); err != nil {
+					logger.Error().Err(err).Msg("The configured LDAP CA cert does not exist")
+					return err
+				}
+			}
+
+			var cancel context.CancelFunc
+			if cfg.Context == nil {
+				cfg.Context, cancel = signal.NotifyContext(context.Background(), runner.StopSignals...)
+				defer cancel()
+			}
+			ctx := cfg.Context
+
+			gr := runner.NewGroup()
+
+			{
+				// run the appropriate reva servers based on the config
+				rCfg := revaconfig.UsersConfigFromStruct(cfg)
+				if rServer := runtime.NewDrivenHTTPServerWithOptions(rCfg,
+					runtime.WithLogger(&logger.Logger),
+					runtime.WithRegistry(registry.GetRegistry()),
+					runtime.WithTraceProvider(traceProvider),
+				); rServer != nil {
+					gr.Add(runner.NewRevaServiceRunner(cfg.Service.Name+".rhttp", rServer))
+				}
+				if rServer := runtime.NewDrivenGRPCServerWithOptions(rCfg,
+					runtime.WithLogger(&logger.Logger),
+					runtime.WithRegistry(registry.GetRegistry()),
+					runtime.WithTraceProvider(traceProvider),
+				); rServer != nil {
+					gr.Add(runner.NewRevaServiceRunner(cfg.Service.Name+".rgrpc", rServer))
+				}
+			}
+
+			{
+				debugServer, err := debug.Server(
+					debug.Logger(logger),
+					debug.Context(ctx),
+					debug.Config(cfg),
+				)
+				if err != nil {
+					logger.Info().Err(err).Str("server", "debug").Msg("Failed to initialize server")
+					return err
+				}
+
+				gr.Add(runner.NewGolangHttpServerRunner(cfg.Service.Name+".debug", debugServer))
+			}
+
+			// FIXME we should defer registering the service until we are sure that reva is running
+			grpcSvc := registry.BuildGRPCService(cfg.GRPC.Namespace+"."+cfg.Service.Name, cfg.GRPC.Protocol, cfg.GRPC.Addr, version.GetString())
+			if err := registry.RegisterService(ctx, logger, grpcSvc, cfg.Debug.Addr); err != nil {
+				logger.Fatal().Err(err).Msg("failed to register the grpc service")
+			}
+
+			grResults := gr.Run(ctx)
+
+			// return the first non-nil error found in the results
+			for _, grResult := range grResults {
+				if grResult.RunnerError != nil {
+					return grResult.RunnerError
+				}
+			}
+			return nil
+		},
+	}
+}

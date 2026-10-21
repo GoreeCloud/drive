@@ -1,0 +1,39 @@
+package config
+
+import (
+	"context"
+
+	"github.com/opencloud-eu/opencloud/pkg/shared"
+)
+
+// Config combines all available configuration parts.
+type Config struct {
+	Commons  *shared.Commons `yaml:"-"` // don't use this directly as configuration for a service
+	Service  Service         `yaml:"-"`
+	LogLevel string          `yaml:"loglevel" env:"OC_LOG_LEVEL;AUDIT_LOG_LEVEL" desc:"The log level. Valid values are: 'panic', 'fatal', 'error', 'warn', 'info', 'debug', 'trace'." introductionVersion:"1.0.0"`
+	Debug    Debug           `yaml:"debug"`
+
+	Events   Events   `yaml:"events"`
+	Auditlog Auditlog `yaml:"auditlog"`
+
+	Context context.Context `yaml:"-"`
+}
+
+// Events combines the configuration options for the event bus.
+type Events struct {
+	Endpoint             string `yaml:"endpoint" env:"OC_EVENTS_ENDPOINT;AUDIT_EVENTS_ENDPOINT" desc:"The address of the event system. The event system is the message queuing service. It is used as message broker for the microservice architecture." introductionVersion:"1.0.0"`
+	Cluster              string `yaml:"cluster" env:"OC_EVENTS_CLUSTER;AUDIT_EVENTS_CLUSTER" desc:"The clusterID of the event system. The event system is the message queuing service. It is used as message broker for the microservice architecture. Mandatory when using NATS as event system." introductionVersion:"1.0.0"`
+	TLSInsecure          bool   `yaml:"tls_insecure" env:"OC_INSECURE;OC_EVENTS_TLS_INSECURE;AUDIT_EVENTS_TLS_INSECURE" desc:"Whether to verify the server TLS certificates." introductionVersion:"1.0.0"`
+	TLSRootCACertificate string `yaml:"tls_root_ca_certificate" env:"OC_EVENTS_TLS_ROOT_CA_CERTIFICATE;AUDIT_EVENTS_TLS_ROOT_CA_CERTIFICATE" desc:"The root CA certificate used to validate the server's TLS certificate. If provided AUDIT_EVENTS_TLS_INSECURE will be seen as false." introductionVersion:"1.0.0"`
+	EnableTLS            bool   `yaml:"enable_tls" env:"OC_EVENTS_ENABLE_TLS;AUDIT_EVENTS_ENABLE_TLS" desc:"Enable TLS for the connection to the events broker. The events broker is the OpenCloud service which receives and delivers events between the services." introductionVersion:"1.0.0"`
+	AuthUsername         string `yaml:"username" env:"OC_EVENTS_AUTH_USERNAME;AUDIT_EVENTS_AUTH_USERNAME" desc:"The username to authenticate with the events broker. The events broker is the OpenCloud service which receives and delivers events between the services." introductionVersion:"1.0.0"`
+	AuthPassword         string `yaml:"password" env:"OC_EVENTS_AUTH_PASSWORD;AUDIT_EVENTS_AUTH_PASSWORD" desc:"The password to authenticate with the events broker. The events broker is the OpenCloud service which receives and delivers events between the services." introductionVersion:"1.0.0"`
+}
+
+// Auditlog holds audit log information
+type Auditlog struct {
+	LogToConsole bool   `yaml:"log_to_console" env:"AUDIT_LOG_TO_CONSOLE" desc:"Logs to stdout if set to 'true'. Independent of the LOG_TO_FILE option." introductionVersion:"1.0.0"`
+	LogToFile    bool   `yaml:"log_to_file" env:"AUDIT_LOG_TO_FILE" desc:"Logs to file if set to 'true'. Independent of the LOG_TO_CONSOLE option." introductionVersion:"1.0.0"`
+	FilePath     string `yaml:"filepath" env:"AUDIT_FILEPATH" desc:"Filepath of the logfile. Mandatory if LOG_TO_FILE is set to 'true'." introductionVersion:"1.0.0"`
+	Format       string `yaml:"format" env:"AUDIT_FORMAT" desc:"Log format. Supported values are '' (empty) and 'json'. Using 'json' is advised, '' (empty) renders the 'minimal' format. See the text description for more details." introductionVersion:"1.0.0"`
+}

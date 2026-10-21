@@ -1,0 +1,9 @@
+dn: ou=TestUsers,dc=example,dc=org
+objectclass: top
+objectclass: organizationalUnit
+ou: TestUsers
+
+dn: ou=TestGroups,dc=example,dc=org
+objectclass: top
+objectclass: organizationalUnit
+ou: TestGroups

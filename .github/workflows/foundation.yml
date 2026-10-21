@@ -1,0 +1,33 @@
+name: GoreeCloud Drive foundation
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  source-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify provenance and licensing
+        run: |
+          test -s LICENSE
+          test -s go.mod
+          test -s docs/UPSTREAM.md
+          test -s docs/UPSTREAM-README.md
+          grep -q '^module github.com/opencloud-eu/opencloud$' go.mod
+          grep -q '61ae13a1fea0bb8a36bf4b96c1d222fc84aeaa9c' docs/UPSTREAM.md
+          git diff --check
+  theme-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Go web-theme unit tests
+        run: go test -mod=vendor ./services/web/pkg/theme

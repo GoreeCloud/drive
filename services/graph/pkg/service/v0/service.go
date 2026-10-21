@@ -1,0 +1,474 @@
+package svc
+
+import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jellydator/ttlcache/v3"
+	"github.com/opencloud-eu/opencloud/services/graph/pkg/identity/cache"
+	"github.com/riandyrn/otelchi"
+	microstore "go-micro.dev/v4/store"
+
+	"github.com/opencloud-eu/reva/v2/pkg/store"
+
+	"github.com/opencloud-eu/opencloud/pkg/roles"
+	"github.com/opencloud-eu/opencloud/pkg/service/grpc"
+	"github.com/opencloud-eu/opencloud/pkg/tracing"
+	settingssvc "github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/settings/v0"
+	graphm "github.com/opencloud-eu/opencloud/services/graph/pkg/middleware"
+	"github.com/opencloud-eu/opencloud/services/graph/pkg/unifiedrole"
+)
+
+const (
+	// HeaderPurge defines the header name for the purge header.
+	HeaderPurge     = "Purge"
+	displayNameAttr = "displayName"
+)
+
+// Service defines the service handlers.
+type Service interface { //nolint:interfacebloat
+	ServeHTTP(w http.ResponseWriter, r *http.Request)
+
+	ListApplications(w http.ResponseWriter, r *http.Request)
+	GetApplication(w http.ResponseWriter, r *http.Request)
+
+	GetMe(w http.ResponseWriter, r *http.Request)
+	GetUsers(w http.ResponseWriter, r *http.Request)
+	GetUser(w http.ResponseWriter, r *http.Request)
+	PostUser(w http.ResponseWriter, r *http.Request)
+	DeleteUser(w http.ResponseWriter, r *http.Request)
+	PatchUser(w http.ResponseWriter, r *http.Request)
+	ChangeOwnPassword(w http.ResponseWriter, r *http.Request)
+	PatchMe(w http.ResponseWriter, r *http.Request)
+
+	ListAppRoleAssignments(w http.ResponseWriter, r *http.Request)
+	CreateAppRoleAssignment(w http.ResponseWriter, r *http.Request)
+	DeleteAppRoleAssignment(w http.ResponseWriter, r *http.Request)
+
+	GetGroups(w http.ResponseWriter, r *http.Request)
+	GetGroup(w http.ResponseWriter, r *http.Request)
+	PostGroup(w http.ResponseWriter, r *http.Request)
+	PatchGroup(w http.ResponseWriter, r *http.Request)
+	DeleteGroup(w http.ResponseWriter, r *http.Request)
+	GetGroupMembers(w http.ResponseWriter, r *http.Request)
+	PostGroupMember(w http.ResponseWriter, r *http.Request)
+	DeleteGroupMember(w http.ResponseWriter, r *http.Request)
+
+	GetEducationSchools(w http.ResponseWriter, r *http.Request)
+	GetEducationSchool(w http.ResponseWriter, r *http.Request)
+	PostEducationSchool(w http.ResponseWriter, r *http.Request)
+	PatchEducationSchool(w http.ResponseWriter, r *http.Request)
+	DeleteEducationSchool(w http.ResponseWriter, r *http.Request)
+	GetEducationSchoolUsers(w http.ResponseWriter, r *http.Request)
+	PostEducationSchoolUser(w http.ResponseWriter, r *http.Request)
+	DeleteEducationSchoolUser(w http.ResponseWriter, r *http.Request)
+	GetEducationSchoolClasses(w http.ResponseWriter, r *http.Request)
+	PostEducationSchoolClass(w http.ResponseWriter, r *http.Request)
+	DeleteEducationSchoolClass(w http.ResponseWriter, r *http.Request)
+
+	GetEducationClasses(w http.ResponseWriter, r *http.Request)
+	GetEducationClass(w http.ResponseWriter, r *http.Request)
+	PostEducationClass(w http.ResponseWriter, r *http.Request)
+	PatchEducationClass(w http.ResponseWriter, r *http.Request)
+	DeleteEducationClass(w http.ResponseWriter, r *http.Request)
+	GetEducationClassMembers(w http.ResponseWriter, r *http.Request)
+	PostEducationClassMember(w http.ResponseWriter, r *http.Request)
+
+	GetEducationUsers(w http.ResponseWriter, r *http.Request)
+	GetEducationUser(w http.ResponseWriter, r *http.Request)
+	PostEducationUser(w http.ResponseWriter, r *http.Request)
+	DeleteEducationUser(w http.ResponseWriter, r *http.Request)
+	PatchEducationUser(w http.ResponseWriter, r *http.Request)
+	DeleteEducationClassMember(w http.ResponseWriter, r *http.Request)
+
+	GetEducationClassTeachers(w http.ResponseWriter, r *http.Request)
+	PostEducationClassTeacher(w http.ResponseWriter, r *http.Request)
+	DeleteEducationClassTeacher(w http.ResponseWriter, r *http.Request)
+
+	GetDrivesV1(w http.ResponseWriter, r *http.Request)
+	GetDrivesV1Beta1(w http.ResponseWriter, r *http.Request)
+	GetSingleDrive(w http.ResponseWriter, r *http.Request)
+	GetAllDrivesV1(w http.ResponseWriter, r *http.Request)
+	GetAllDrivesV1Beta1(w http.ResponseWriter, r *http.Request)
+	CreateDrive(w http.ResponseWriter, r *http.Request)
+	UpdateDrive(w http.ResponseWriter, r *http.Request)
+	DeleteDrive(w http.ResponseWriter, r *http.Request)
+
+	GetSharedByMe(w http.ResponseWriter, r *http.Request)
+	ListSharedWithMe(w http.ResponseWriter, r *http.Request)
+
+	GetRootDriveChildren(w http.ResponseWriter, r *http.Request)
+	GetDriveItem(w http.ResponseWriter, r *http.Request)
+	GetDriveItemChildren(w http.ResponseWriter, r *http.Request)
+
+	CreateUploadSession(w http.ResponseWriter, r *http.Request)
+
+	GetTags(w http.ResponseWriter, r *http.Request)
+	AssignTags(w http.ResponseWriter, r *http.Request)
+	UnassignTags(w http.ResponseWriter, r *http.Request)
+}
+
+// NewService returns a service implementation for Service.
+func NewService(opts ...Option) (Graph, error) { //nolint:maintidx
+	options := newOptions(opts...)
+
+	m := chi.NewMux()
+	m.Use(options.Middleware...)
+	m.Use(
+		otelchi.Middleware(
+			"graph",
+			otelchi.WithChiRoutes(m),
+			otelchi.WithTracerProvider(options.TraceProvider),
+			otelchi.WithPropagators(tracing.GetPropagator()),
+		),
+	)
+
+	spacePropertiesCache := ttlcache.New(
+		ttlcache.WithTTL[string, any](
+			time.Duration(options.Config.Spaces.ExtendedSpacePropertiesCacheTTL),
+		),
+		ttlcache.WithDisableTouchOnHit[string, any](),
+	)
+	go spacePropertiesCache.Start()
+
+	identityCache := cache.NewIdentityCache(
+		cache.IdentityCacheWithGatewaySelector(options.GatewaySelector),
+		cache.IdentityCacheWithUsersTTL(time.Duration(options.Config.Spaces.UsersCacheTTL)),
+		cache.IdentityCacheWithGroupsTTL(time.Duration(options.Config.Spaces.GroupsCacheTTL)),
+	)
+
+	publicBaseURL, err := url.Parse(options.Config.Spaces.WebDavBase)
+	if err != nil {
+		return Graph{}, fmt.Errorf("could not parse graph.spaces.webdav_base: %w", err)
+	}
+
+	baseGraphService := BaseGraphService{
+		logger:          &options.Logger,
+		identityCache:   identityCache,
+		gatewaySelector: options.GatewaySelector,
+		config:          options.Config,
+		availableRoles:  unifiedrole.GetRoles(unifiedrole.RoleFilterIDs(options.Config.UnifiedRoles.AvailableRoles...)),
+		publicBaseURL:   publicBaseURL,
+	}
+
+	drivesDriveItemService, err := NewDrivesDriveItemService(options.Logger, options.GatewaySelector)
+	if err != nil {
+		return Graph{}, err
+	}
+
+	drivesDriveItemApi, err := NewDrivesDriveItemApi(drivesDriveItemService, baseGraphService, options.Logger)
+	if err != nil {
+		return Graph{}, err
+	}
+
+	driveItemPermissionsService, err := NewDriveItemPermissionsService(options.Logger, options.GatewaySelector, identityCache, options.Config)
+	if err != nil {
+		return Graph{}, err
+	}
+
+	driveItemPermissionsApi, err := NewDriveItemPermissionsApi(driveItemPermissionsService, options.Logger, options.Config)
+	if err != nil {
+		return Graph{}, err
+	}
+
+	usersUserProfilePhotoApi, err := NewUsersUserProfilePhotoApi(options.UserProfilePhotoService, options.Logger)
+	if err != nil {
+		return Graph{}, err
+	}
+
+	svc := Graph{
+		BaseGraphService:         baseGraphService,
+		mux:                      m,
+		specialDriveItemsCache:   spacePropertiesCache,
+		eventsPublisher:          options.EventsPublisher,
+		searchService:            options.SearchService,
+		identityBackend:          options.IdentityBackend,
+		identityEducationBackend: options.IdentityEducationBackend,
+		keycloakClient:           options.KeycloakClient,
+		historyClient:            options.EventHistoryClient,
+		metrics:                  options.Metrics,
+		traceProvider:            options.TraceProvider,
+		valueService:             options.ValueService,
+		natskv:                   options.NatsKeyValue,
+	}
+
+	if options.PermissionService == nil {
+		grpcClient, err := grpc.NewClient(append(grpc.GetClientOptions(options.Config.GRPCClientTLS), grpc.WithTraceProvider(options.TraceProvider))...)
+		if err != nil {
+			return svc, err
+		}
+		svc.permissionsService = settingssvc.NewPermissionService("eu.opencloud.api.settings", grpcClient)
+	} else {
+		svc.permissionsService = options.PermissionService
+	}
+
+	svc.roleService = options.RoleService
+
+	roleManager := options.RoleManager
+	if roleManager == nil {
+		storeOptions := []microstore.Option{
+			store.Store(options.Config.Cache.Store),
+			store.TTL(options.Config.Cache.TTL),
+			microstore.Nodes(options.Config.Cache.Nodes...),
+			microstore.Database(options.Config.Cache.Database),
+			microstore.Table(options.Config.Cache.Table),
+			store.DisablePersistence(options.Config.Cache.DisablePersistence),
+			store.Authentication(options.Config.Cache.AuthUsername, options.Config.Cache.AuthPassword),
+		}
+		m := roles.NewManager(
+			roles.StoreOptions(storeOptions),
+			roles.Logger(options.Logger),
+			roles.RoleService(options.RoleService),
+		)
+		roleManager = &m
+	}
+
+	var requireAdmin func(http.Handler) http.Handler
+	if options.RequireAdminMiddleware == nil {
+		requireAdmin = graphm.RequireAdmin(roleManager, options.Logger)
+	} else {
+		requireAdmin = options.RequireAdminMiddleware
+	}
+
+	m.Route(options.Config.HTTP.Root, func(r chi.Router) {
+		r.Use(middleware.StripSlashes)
+
+		r.Route("/v1beta1", func(r chi.Router) {
+			r.Route("/me", func(r chi.Router) {
+				r.Get("/drives", svc.GetDrives(APIVersion_1_Beta_1))
+				r.Route("/drive", func(r chi.Router) {
+					r.Get("/sharedByMe", svc.GetSharedByMe)
+					r.Get("/sharedWithMe", svc.ListSharedWithMe)
+				})
+			})
+			r.Route("/drives", func(r chi.Router) {
+				r.Get("/", svc.GetAllDrives(APIVersion_1_Beta_1))
+				r.Route("/{driveID}", func(r chi.Router) {
+					// Rewrites MS Graph colon-syntax lookups (root:/path,
+					// items/{id}:/path) to /items/{resolvedID}... before chi
+					// matches the leaf route. Must sit here, on the
+					// /drives/{driveID} sub-router, so it can rewrite the
+					// remaining RoutePath. See graphm.ResolveGraphPath.
+					r.Use(graphm.ResolveGraphPath(options.GatewaySelector, options.Logger))
+					r.Route("/root", func(r chi.Router) {
+						r.Post("/children", drivesDriveItemApi.CreateDriveItem)
+						r.Post("/invite", driveItemPermissionsApi.SpaceRootInvite)
+						r.Post("/createLink", driveItemPermissionsApi.CreateSpaceRootLink)
+						r.Route("/permissions", func(r chi.Router) {
+							r.Get("/", driveItemPermissionsApi.ListSpaceRootPermissions)
+							r.Route("/{permissionID}", func(r chi.Router) {
+								r.Delete("/", driveItemPermissionsApi.DeleteSpaceRootPermission)
+								r.Patch("/", driveItemPermissionsApi.UpdateSpaceRootPermission)
+								r.Post("/setPassword", driveItemPermissionsApi.SetSpaceRootLinkPassword)
+							})
+						})
+					})
+					r.Route("/items/{itemID}", func(r chi.Router) {
+						r.Get("/", drivesDriveItemApi.GetDriveItem)
+						r.Patch("/", drivesDriveItemApi.UpdateDriveItem)
+						r.Delete("/", drivesDriveItemApi.DeleteDriveItem)
+						r.Post("/invite", driveItemPermissionsApi.Invite)
+						r.Post("/createLink", driveItemPermissionsApi.CreateLink)
+						r.Route("/permissions", func(r chi.Router) {
+							r.Get("/", driveItemPermissionsApi.ListPermissions)
+							r.Route("/{permissionID}", func(r chi.Router) {
+								r.Delete("/", driveItemPermissionsApi.DeletePermission)
+								r.Patch("/", driveItemPermissionsApi.UpdatePermission)
+								r.Post("/setPassword", driveItemPermissionsApi.SetLinkPassword)
+							})
+						})
+					})
+				})
+			})
+			r.Route("/roleManagement/permissions/roleDefinitions", func(r chi.Router) {
+				r.Get("/", svc.GetRoleDefinitions)
+				r.Get("/{roleID}", svc.GetRoleDefinition)
+			})
+		})
+		r.Route("/v1.0", func(r chi.Router) {
+			r.Route("/extensions/org.libregraph", func(r chi.Router) {
+				r.Get("/tags", svc.GetTags)
+				r.Put("/tags", svc.AssignTags)
+				r.Delete("/tags", svc.UnassignTags)
+			})
+			r.Route("/applications", func(r chi.Router) {
+				r.Get("/", svc.ListApplications)
+				r.Get("/{applicationID}", svc.GetApplication)
+			})
+			r.Route("/me", func(r chi.Router) {
+				r.Get("/", svc.GetMe)
+				r.Patch("/", svc.PatchMe)
+				r.Route("/drive", func(r chi.Router) {
+					r.Get("/", svc.GetUserDrive)
+					r.Get("/root/children", svc.GetRootDriveChildren)
+					r.Post("/items/{itemID}/follow", svc.FollowDriveItem)
+					r.Delete("/following/{itemID}", svc.UnfollowDriveItem)
+				})
+				r.Get("/drives", svc.GetDrives(APIVersion_1))
+				r.Post("/changePassword", svc.ChangeOwnPassword)
+				r.Route("/photo/$value", func(r chi.Router) {
+					r.Get("/", usersUserProfilePhotoApi.GetProfilePhoto(GetUserIDFromCTX))
+					r.Put("/", usersUserProfilePhotoApi.UpsertProfilePhoto(GetUserIDFromCTX))
+					r.Patch("/", usersUserProfilePhotoApi.UpsertProfilePhoto(GetUserIDFromCTX))
+					r.Delete("/", usersUserProfilePhotoApi.DeleteProfilePhoto(GetUserIDFromCTX))
+				})
+			})
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/", svc.GetUsers)
+				r.With(requireAdmin).Post("/", svc.PostUser)
+				r.Route("/{userID}", func(r chi.Router) {
+					r.Get("/", svc.GetUser)
+					r.Get("/drive", svc.GetUserDrive)
+					r.Post("/exportPersonalData", svc.ExportPersonalData)
+					r.Post("/teamwork/sendActivityNotification", svc.SendActivityNotification)
+					r.Route("/photo/$value", func(r chi.Router) {
+						r.Get("/", usersUserProfilePhotoApi.GetProfilePhoto(GetSlugValue("userID")))
+					})
+					r.With(requireAdmin).Delete("/", svc.DeleteUser)
+					r.With(requireAdmin).Patch("/", svc.PatchUser)
+					if svc.roleService != nil {
+						r.With(requireAdmin).Route("/appRoleAssignments", func(r chi.Router) {
+							r.Get("/", svc.ListAppRoleAssignments)
+							r.Post("/", svc.CreateAppRoleAssignment)
+							r.Delete("/{appRoleAssignmentID}", svc.DeleteAppRoleAssignment)
+						})
+					}
+				})
+			})
+			r.Route("/groups", func(r chi.Router) {
+				r.Get("/", svc.GetGroups)
+				r.With(requireAdmin).Post("/", svc.PostGroup)
+				r.Route("/{groupID}", func(r chi.Router) {
+					r.Get("/", svc.GetGroup)
+					r.With(requireAdmin).Delete("/", svc.DeleteGroup)
+					r.With(requireAdmin).Patch("/", svc.PatchGroup)
+					r.Route("/members", func(r chi.Router) {
+						r.With(requireAdmin).Get("/", svc.GetGroupMembers)
+						r.With(requireAdmin).Post("/$ref", svc.PostGroupMember)
+						r.With(requireAdmin).Delete("/{memberID}/$ref", svc.DeleteGroupMember)
+					})
+				})
+			})
+			r.Route("/drives", func(r chi.Router) {
+				r.Get("/", svc.GetAllDrives(APIVersion_1))
+				r.Post("/", svc.CreateDrive)
+				r.Route("/{driveID}", func(r chi.Router) {
+					// Rewrites MS Graph colon-syntax lookups (root:/path,
+					// items/{id}:/path) to /items/{resolvedID}... before chi
+					// matches the leaf route. Must sit here, on the
+					// /drives/{driveID} sub-router, so it can rewrite the
+					// remaining RoutePath. See graphm.ResolveGraphPath.
+					r.Use(graphm.ResolveGraphPath(options.GatewaySelector, options.Logger))
+					r.Patch("/", svc.UpdateDrive)
+					r.Get("/", svc.GetSingleDrive)
+					r.Delete("/", svc.DeleteDrive)
+					r.Route("/items/{driveItemID}", func(r chi.Router) {
+						r.Get("/", svc.GetDriveItem)
+						r.Get("/children", svc.GetDriveItemChildren)
+						r.Post("/createUploadSession", svc.CreateUploadSession)
+					})
+				})
+			})
+			r.With(requireAdmin).Route("/education", func(r chi.Router) {
+				r.Route("/schools", func(r chi.Router) {
+					r.Get("/", svc.GetEducationSchools)
+					r.Post("/", svc.PostEducationSchool)
+					r.Route("/{schoolID}", func(r chi.Router) {
+						r.Get("/", svc.GetEducationSchool)
+						r.Delete("/", svc.DeleteEducationSchool)
+						r.Patch("/", svc.PatchEducationSchool)
+						r.Route("/users", func(r chi.Router) {
+							r.Get("/", svc.GetEducationSchoolUsers)
+							r.Post("/$ref", svc.PostEducationSchoolUser)
+							r.Delete("/{userID}/$ref", svc.DeleteEducationSchoolUser)
+						})
+						r.Route("/classes", func(r chi.Router) {
+							r.Get("/", svc.GetEducationSchoolClasses)
+							r.Post("/$ref", svc.PostEducationSchoolClass)
+							r.Delete("/{classID}/$ref", svc.DeleteEducationSchoolClass)
+						})
+					})
+				})
+				r.Route("/users", func(r chi.Router) {
+					r.Get("/", svc.GetEducationUsers)
+					r.Post("/", svc.PostEducationUser)
+					r.Route("/{userID}", func(r chi.Router) {
+						r.Get("/", svc.GetEducationUser)
+						r.Delete("/", svc.DeleteEducationUser)
+						r.Patch("/", svc.PatchEducationUser)
+					})
+				})
+				r.Route("/classes", func(r chi.Router) {
+					r.Get("/", svc.GetEducationClasses)
+					r.Post("/", svc.PostEducationClass)
+					r.Route("/{classID}", func(r chi.Router) {
+						r.Get("/", svc.GetEducationClass)
+						r.Delete("/", svc.DeleteEducationClass)
+						r.Patch("/", svc.PatchEducationClass)
+						r.Route("/members", func(r chi.Router) {
+							r.Get("/", svc.GetEducationClassMembers)
+							r.Post("/$ref", svc.PostEducationClassMember)
+							r.Delete("/{memberID}/$ref", svc.DeleteEducationClassMember)
+						})
+						r.Route("/teachers", func(r chi.Router) {
+							r.Get("/", svc.GetEducationClassTeachers)
+							r.Post("/$ref", svc.PostEducationClassTeacher)
+							r.Delete("/{teacherID}/$ref", svc.DeleteEducationClassTeacher)
+						})
+					})
+				})
+			})
+		})
+	})
+
+	_ = chi.Walk(m, func(method string, route string, handler http.Handler, middlewares ...func(http.Handler) http.Handler) error {
+		options.Logger.Debug().Str("method", method).Str("route", route).Int("middlewares", len(middlewares)).Msg("serving endpoint")
+		return nil
+	})
+
+	return svc, nil
+}
+
+// this function receives the request URI path chi pattern, split cleanly on '/'
+// and is tasked with returning a value for the Graph API version,
+// as well as a value for the Graph API resource
+//
+// e.g. for
+//
+//	'/graph/v1.0/users/{userid}'
+//	-> receive ['graph', 'v1.0', 'users', '{userid}']
+//	<- return ('v1.0', 'users')
+func DecomposeGraphApiRequestPattern(pieces []string) (string, string) {
+	// we keep this function close to the chi routes to improve our changes of
+	// changing this implementation whenever we change the routes
+	version := ""
+	resource := ""
+	if len(pieces) >= 2 {
+		// first path element is the /graph prefix, ignore that
+		// followed by the version (v1.0)
+		version = pieces[1]
+		if len(pieces) >= 3 {
+			// and the resource
+			resource = pieces[2]
+		}
+	}
+	return version, resource
+
+}
+
+// parseHeaderPurge parses the 'Purge' header.
+// '1', 't', 'T', 'TRUE', 'true', 'True' are parsed as true
+// all other values are false.
+func parsePurgeHeader(h http.Header) bool {
+	val := h.Get(HeaderPurge)
+
+	if b, err := strconv.ParseBool(val); err == nil {
+		return b
+	}
+	return false
+}
