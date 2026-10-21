@@ -11,14 +11,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify provenance and licensing
+      - name: Verify provenance, licensing and GoreeCloud Fork classification
         run: |
           test -s LICENSE
           test -s go.mod
           test -s docs/UPSTREAM.md
           test -s docs/UPSTREAM-README.md
+          test -s docs/GOREECLOUD-FORK.md
+          test ! -e docs/FORK-TO-NATIVE.md
           grep -q '^module github.com/opencloud-eu/opencloud$' go.mod
           grep -q '61ae13a1fea0bb8a36bf4b96c1d222fc84aeaa9c' docs/UPSTREAM.md
+          grep -q '\*\*GoreeCloud Fork\*\*' README.md
+          grep -q 'GitHub-hosted upstream-linked fork' docs/UPSTREAM.md
           git diff --check
   theme-tests:
     runs-on: ubuntu-latest
