@@ -53,6 +53,30 @@ missing-asset paths. Roll back through the reviewed source commit if a custom
 reverse proxy depends on legacy fallback behavior; do not rely on HTTP 200
 for absent frontend assets.
 
+### Browser delivery smoke test (development and CI)
+
+The dedicated `scripts/embedded-web-smoke` command serves the *actual Go-embedded*
+Files browser assets over HTTP on **127.0.0.1 only**. It exposes no storage,
+authentication system, API credentials or user data. The
+`web-client/tests/smoke/embedded-assets.mjs` Playwright test verifies desktop
+and mobile Chromium delivery of the real GoreeCloud Drive HTML page, compiled
+JavaScript, document deep links, missing-resource 404s and invalid-method 405s.
+
+On a development laptop with the pinned frontend `playwright` dependency and
+compatible Chromium installed, run from the repository root:
+
+```sh
+go build -mod=vendor -o /tmp/goreecloud-web-smoke ./scripts/embedded-web-smoke
+/tmp/goreecloud-web-smoke # separate terminal; listens only on 127.0.0.1:18523
+cd web-client
+node tests/smoke/embedded-assets.mjs
+```
+
+The browser test is also an enforced stage in the reproducible web-client
+GitHub Actions workflow. It is a **static Files browser-delivery contract**,
+not a substitute for isolated real OIDC/login, upload, download, sharing,
+versioning, offline sync or full accessibility acceptance tests.
+
 ### Optional GoreeCloud UI Foundations theme
 
 A source-verified GoreeCloud UI semantic color mapping is embedded as a
