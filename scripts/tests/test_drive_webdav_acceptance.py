@@ -59,6 +59,11 @@ class DavFixture(BaseHTTPRequestHandler):
             return self.respond(403)
         data = self.rfile.read(int(self.headers.get("Content-Length", "0")))
         existed = self.path in self.server.files
+        if self.server.inject_race and not existed:
+            self.server.files[self.path] = b"another test principal"
+            existed = True
+        if self.headers.get("If-None-Match") == "*" and existed:
+            return self.respond(412)
         self.server.files[self.path] = data
         if self.server.fail_after_put:
             return self.respond(503)
@@ -81,6 +86,7 @@ class AcceptanceGateTests(unittest.TestCase):
         self.server.redirect = False
         self.server.corrupt = False
         self.server.fail_after_put = False
+        self.server.inject_race = False
         self.server.delete_count = 0
         self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.worker.start()
@@ -126,6 +132,18 @@ class AcceptanceGateTests(unittest.TestCase):
             mutation_contract(DavClient(Config(self.url, AUTH, mutate=True)), name=name)
         self.assertEqual(self.server.files["/dav/" + name], original)
         self.assertEqual(self.server.delete_count, 0)
+
+    def test_competing_create_is_rejected_and_other_file_is_preserved(self):
+        self.server.inject_race = True
+        name = ".goreecloud-acceptance-race.txt"
+        with self.assertRaisesRegex(AcceptanceError, "Conditional creation"):
+            mutation_contract(DavClient(Config(self.url, AUTH, mutate=True)), name=name)
+        self.assertEqual(self.server.files["/dav/" + name], b"another test principal")
+        self.assertEqual(self.server.delete_count, 0)
+
+    def test_conditional_creation_cannot_be_used_with_get(self):
+        with self.assertRaisesRegex(AcceptanceError, "only to PUT"):
+            DavClient(self.config).request("GET", self.url, create_only=True)
 
     def test_mutation_disabled_by_default(self):
         with self.assertRaisesRegex(AcceptanceError, "disabled"):

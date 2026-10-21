@@ -103,7 +103,7 @@ class DavClient:
         )
 
     def request(self, method: str, url: str, *, auth: bool = True,
-                body: bytes | None = None) -> Response:
+                body: bytes | None = None, create_only: bool = False) -> Response:
         if url != self.config.dav_url and not url.startswith(self.config.dav_url):
             raise AcceptanceError("Request escaped configured DAV collection")
         validate_dav_url(url)
@@ -116,6 +116,10 @@ class DavClient:
             body = DAV_PROPFIND
         elif method == "PUT":
             headers["Content-Type"] = "text/plain; charset=utf-8"
+        if create_only:
+            if method != "PUT":
+                raise AcceptanceError("Conditional creation applies only to PUT")
+            headers["If-None-Match"] = "*"
         req = urllib.request.Request(url, data=body, headers=headers, method=method)
         try:
             response = self.opener.open(req, timeout=10)
@@ -169,8 +173,12 @@ def mutation_contract(client: DavClient, *, name: str | None = None) -> list[str
     _require_status(client.request("GET", url), {404, 410}, "Disposable name preflight")
     try:
         attempted_put = True
-        response = client.request("PUT", url, body=original)
-        _require_status(response, {200, 201, 204}, "Creating disposable file")
+        response = client.request("PUT", url, body=original, create_only=True)
+        if response.status == 412:
+            # A racing writer owns that name. Never delete their file.
+            attempted_put = False
+            raise AcceptanceError("Conditional creation rejected an existing file")
+        _require_status(response, {201}, "Creating disposable file")
         created = True
         downloaded = client.request("GET", url)
         _require_status(downloaded, {200}, "Reading created file")
