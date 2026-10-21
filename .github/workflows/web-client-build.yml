@@ -4,6 +4,7 @@ on:
     paths:
       - "web-client/**"
       - "scripts/build_drive_web_client.sh"
+      - "scripts/embedded-web-smoke/**"
       - "services/web/assets/core/**"
       - "services/web/web_embedded_test.go"
       - "services/web/web_source_disclosure_test.go"
@@ -15,6 +16,7 @@ on:
     paths:
       - "web-client/**"
       - "scripts/build_drive_web_client.sh"
+      - "scripts/embedded-web-smoke/**"
       - "services/web/assets/core/**"
       - "services/web/web_embedded_test.go"
       - "services/web/web_source_disclosure_test.go"
@@ -51,3 +53,32 @@ jobs:
           cache: false
       - name: Validate real embedded UI and backend web contracts
         run: go test -mod=vendor ./services/web/...
+      - name: Install Chromium browser for real asset-delivery smoke test
+        run: cd web-client && pnpm exec playwright install --with-deps chromium
+      - name: Browser smoke against isolated embedded web asset server
+        shell: bash
+        timeout-minutes: 10
+        run: |
+          set -euo pipefail
+          go build -p=2 -mod=vendor -o "$RUNNER_TEMP/goreecloud-embedded-web-smoke" ./scripts/embedded-web-smoke
+          if GOREECLOUD_EMBEDDED_SMOKE_ADDR=0.0.0.0:18523 "$RUNNER_TEMP/goreecloud-embedded-web-smoke" > "$RUNNER_TEMP/unsafe-bind.log" 2>&1; then
+            echo "Embedded smoke server unexpectedly allowed a public bind" >&2
+            exit 1
+          fi
+          "$RUNNER_TEMP/goreecloud-embedded-web-smoke" > "$RUNNER_TEMP/embedded-web-smoke.log" 2>&1 &
+          smoke_pid=$!
+          trap 'kill "$smoke_pid" 2>/dev/null || true' EXIT
+          ready=0
+          for attempt in $(seq 1 45); do
+            if curl --fail --silent http://127.0.0.1:18523/manifest.json > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [[ "$ready" != 1 ]]; then
+            cat "$RUNNER_TEMP/embedded-web-smoke.log"
+            echo "Embedded web smoke server did not start" >&2
+            exit 1
+          fi
+          (cd web-client && node tests/smoke/embedded-assets.mjs)
