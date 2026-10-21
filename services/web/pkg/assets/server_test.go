@@ -37,8 +37,8 @@ func TestFileServer(t *testing.T) {
 		expected string
 	}{
 		{
-			name: "not found fallback",
-			url:  "/index.txt",
+			name: "SPA navigation fallback",
+			url:  "/some-route",
 			fs: fstest.MapFS{
 				"index.html": &fstest.MapFile{
 					Data: []byte("index file content"),
@@ -73,7 +73,7 @@ func TestFileServer(t *testing.T) {
 			name: "oidc-callback.html",
 			url:  "/oidc-callback.html",
 			fs: fstest.MapFS{
-				"index.html": &fstest.MapFile{
+				"oidc-callback.html": &fstest.MapFile{
 					Data: []byte("oidc-callback file content"),
 				},
 			},
@@ -83,7 +83,7 @@ func TestFileServer(t *testing.T) {
 			name: "oidc-silent-redirect.html",
 			url:  "/oidc-silent-redirect.html",
 			fs: fstest.MapFS{
-				"index.html": &fstest.MapFile{
+				"oidc-silent-redirect.html": &fstest.MapFile{
 					Data: []byte("oidc-silent-redirect file content"),
 				},
 			},

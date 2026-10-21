@@ -32,6 +32,27 @@ but cannot guarantee partial-content requests. Rewritten HTML entry points
 retain their `no-cache` policy and are served from their rewritten contents.
 These behaviors concern **web UI assets**, not user-file download APIs.
 
+### SPA navigation versus missing browser resources
+
+The embedded Files frontend supports deep links for `GET` and `HEAD` page
+navigations, including links containing file extensions, when the request
+accepts `text/html`. Extensionless routes with no `Accept` header preserve
+the earlier navigation fallback for compatible clients.
+
+Missing JavaScript chunks, stylesheets, icons, manifest/configuration files
+and other non-document requests now return **404**, not a misleading
+`200` response containing `index.html`. A broken or partially updated browser
+bundle therefore produces an explicit missing-resource error. Requests using
+methods other than `GET` and `HEAD` return **405** with `Allow: GET, HEAD`.
+Deep-link HTML responses retain `Cache-Control: no-cache`. These safeguards
+apply to the embedded static asset handler only; the authenticated backend
+API, file-download endpoints and reverse-proxy routes remain separate.
+
+Regression coverage includes the actual embedded Files modules plus negative
+missing-asset paths. Roll back through the reviewed source commit if a custom
+reverse proxy depends on legacy fallback behavior; do not rely on HTTP 200
+for absent frontend assets.
+
 ### Optional GoreeCloud UI Foundations theme
 
 A source-verified GoreeCloud UI semantic color mapping is embedded as a

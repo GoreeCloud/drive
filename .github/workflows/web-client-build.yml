@@ -7,6 +7,8 @@ on:
       - "services/web/assets/core/**"
       - "services/web/web_embedded_test.go"
       - "services/web/web_source_disclosure_test.go"
+      - "services/web/web_missing_assets_test.go"
+      - "services/web/pkg/assets/**"
       - ".github/workflows/web-client-build.yml"
   push:
     branches: [main]
@@ -16,6 +18,8 @@ on:
       - "services/web/assets/core/**"
       - "services/web/web_embedded_test.go"
       - "services/web/web_source_disclosure_test.go"
+      - "services/web/web_missing_assets_test.go"
+      - "services/web/pkg/assets/**"
       - ".github/workflows/web-client-build.yml"
   workflow_dispatch:
 permissions:
