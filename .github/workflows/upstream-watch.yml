@@ -1,0 +1,27 @@
+name: OpenCloud upstream and security watch
+on:
+  schedule:
+    - cron: "29 8 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/upstream-watch.yml"
+      - "scripts/check_opencloud_upstream.py"
+      - "scripts/tests/test_check_opencloud_upstream.py"
+      - "docs/UPSTREAM-WATCH.json"
+      - "docs/UPSTREAM.md"
+permissions:
+  contents: read
+jobs:
+  upstream-watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Offline comparator and baseline tests
+        run: python3 -m unittest discover -s scripts/tests -p 'test_check_opencloud_upstream.py' -v
+      - name: Read-only public upstream comparison
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/check_opencloud_upstream.py

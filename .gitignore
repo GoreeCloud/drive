@@ -65,3 +65,7 @@ go.work.sum
 
 # example deployments
 **/opencloud-sandbox-*
+
+# Python maintenance script caches
+__pycache__/
+*.pyc
