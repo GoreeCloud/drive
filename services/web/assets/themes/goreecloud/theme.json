@@ -1,0 +1,157 @@
+{
+  "common": {
+    "name": "GoreeCloud Drive — UI Foundations Preview",
+    "slogan": "Private cloud storage and collaboration",
+    "logo": "themes/opencloud/assets/logo-lilac.svg",
+    "shareRoles": {
+      "b1e2218d-eef8-4d4c-b82d-0f1a1b48f3b5": {
+        "name": "UnifiedRoleViewer",
+        "iconName": "eye"
+      },
+      "a8d5fe5e-96e3-418d-825b-534dbdf22b99": {
+        "label": "UnifiedRoleSpaceViewer",
+        "iconName": "eye"
+      },
+      "2d00ce52-1fc2-4dbc-8b95-a73b73395f5a": {
+        "label": "UnifiedRoleFileEditor",
+        "iconName": "pencil"
+      },
+      "fb6c3e19-e378-47e5-b277-9732f9de6e21": {
+        "label": "UnifiedRoleEditor",
+        "iconName": "pencil"
+      },
+      "58c63c02-1d89-4572-916a-870abc5a1b7d": {
+        "label": "UnifiedRoleSpaceEditor",
+        "iconName": "pencil"
+      },
+      "312c0871-5ef7-4b3a-85b6-0e4074c64049": {
+        "label": "UnifiedRoleManager",
+        "iconName": "user-star"
+      },
+      "1c996275-f1c9-4e71-abdf-a42f6495e960": {
+        "label": "UnifiedRoleUploader",
+        "iconName": "upload"
+      },
+      "aa97fe03-7980-45ac-9e50-b325749fd7e6": {
+        "label": "UnifiedRoleSecureView",
+        "iconName": "shield"
+      }
+    }
+  },
+  "clients": {
+    "android": {},
+    "desktop": {},
+    "ios": {},
+    "web": {
+      "defaults": {
+        "logo": "themes/opencloud/assets/logo-petrol.svg",
+        "logoMobile": "themes/opencloud/assets/logo-petrol-mobile.svg",
+        "favicon": "themes/opencloud/assets/favicon.svg"
+      },
+      "themes": [
+        {
+          "isDark": false,
+          "label": "GoreeCloud UI · Iris (light)",
+          "designTokens": {
+            "roles": {
+              "primary": "#5145D9",
+              "onPrimary": "#FFFFFF",
+              "primaryContainer": "#E8E6FF",
+              "onPrimaryContainer": "#2C227C",
+              "secondary": "#4C5F8B",
+              "onSecondary": "#FFFFFF",
+              "secondaryContainer": "#E2E8FA",
+              "onSecondaryContainer": "#28395D",
+              "tertiary": "#8054A0",
+              "onTertiary": "#FFFFFF",
+              "tertiaryContainer": "#F1DFFD",
+              "onTertiaryContainer": "#4E266B",
+              "error": "#A73549",
+              "onError": "#FFFFFF",
+              "errorContainer": "#FFE7EB",
+              "onErrorContainer": "#6D1A2B",
+              "background": "#ECF0F8",
+              "onBackground": "#20243A",
+              "surface": "#F9FAFD",
+              "onSurface": "#20243A",
+              "surfaceVariant": "#E5EBF6",
+              "onSurfaceVariant": "#5F657B",
+              "outline": "#8990A7",
+              "outlineVariant": "#E5E7F0",
+              "scrim": "#16172B",
+              "inverseSurface": "#252B3D",
+              "inverseOnSurface": "#F7F8FC",
+              "surfaceDim": "#DFE6F3",
+              "surfaceBright": "#FFFFFF",
+              "surfaceContainerLowest": "#DFE6F3",
+              "surfaceContainerLow": "#F9FAFD",
+              "surfaceContainer": "#E5EBF6",
+              "surfaceContainerHigh": "#FFFFFF",
+              "surfaceContainerHighest": "#FFFFFF",
+              "shadow": "#16172B",
+              "inversePrimary": "#C5BFFF",
+              "primaryFixed": "#E8E6FF",
+              "onPrimaryFixed": "#2C227C",
+              "secondaryFixed": "#E2E8FA",
+              "onSecondaryFixed": "#28395D",
+              "tertiaryFixed": "#F1DFFD",
+              "onTertiaryFixed": "#4E266B"
+            }
+          }
+        },
+        {
+          "isDark": true,
+          "label": "GoreeCloud UI · Iris (dark)",
+          "designTokens": {
+            "roles": {
+              "primary": "#C5BFFF",
+              "onPrimary": "#241B66",
+              "primaryContainer": "#39316B",
+              "onPrimaryContainer": "#EBE8FF",
+              "secondary": "#BECAEE",
+              "onSecondary": "#293B5C",
+              "secondaryContainer": "#374969",
+              "onSecondaryContainer": "#E8ECFF",
+              "tertiary": "#DCB6F3",
+              "onTertiary": "#442458",
+              "tertiaryContainer": "#573866",
+              "onTertiaryContainer": "#FFE8FF",
+              "error": "#FFB5BE",
+              "onError": "#5B1827",
+              "errorContainer": "#562D38",
+              "onErrorContainer": "#FFE6EB",
+              "background": "#10131E",
+              "onBackground": "#F2F2FA",
+              "surface": "#1D2231",
+              "onSurface": "#F2F2FA",
+              "surfaceVariant": "#292F40",
+              "onSurfaceVariant": "#B3B9CF",
+              "outline": "#747C99",
+              "outlineVariant": "#373C50",
+              "scrim": "#000000",
+              "inverseSurface": "#F1F2FA",
+              "inverseOnSurface": "#20243A",
+              "surfaceDim": "#151A27",
+              "surfaceBright": "#252B3D",
+              "surfaceContainerLowest": "#151A27",
+              "surfaceContainerLow": "#1D2231",
+              "surfaceContainer": "#292F40",
+              "surfaceContainerHigh": "#252B3D",
+              "surfaceContainerHighest": "#252B3D",
+              "shadow": "#000000",
+              "inversePrimary": "#5145D9",
+              "primaryFixed": "#E8E6FF",
+              "onPrimaryFixed": "#2C227C",
+              "secondaryFixed": "#E2E8FA",
+              "onSecondaryFixed": "#28395D",
+              "tertiaryFixed": "#F1DFFD",
+              "onTertiaryFixed": "#4E266B"
+            }
+          },
+          "logo": "themes/opencloud/assets/logo-lilac.svg",
+          "logoMobile": "themes/opencloud/assets/logo-lilac-mobile.svg"
+        }
+      ]
+    }
+  }
+}

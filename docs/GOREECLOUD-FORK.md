@@ -50,6 +50,8 @@ The owner-approved [Policy — Native and GoreeCloud Fork Development and GoreeC
 
 **GoreeCloud UI (GC UI)**, with its canonical implementation in [GoreeCloud/gc-ui](https://github.com/GoreeCloud/gc-ui), is the sole active interface/experience authority. Prior design-system names are retired; they do not authorize new UI. The current [Foundations 1.0.1](https://github.com/GoreeCloud/gc-ui/releases/tag/foundations-v1.0.1) supports a scoped semantic-token/color/theme-controller foundation, **not** an accepted full Drive interface. Do not use the predecessor as a design-source shortcut.
 
+A [selectable, embedded GC UI Foundations theme preview](GC-UI-FOUNDATIONS-THEME.md) maps the officially released semantic light/dark colors into OpenCloud's existing web theme contract. It preserves inherited icons for compatibility, is not the default, and has backend contract tests; it is **not** final GoreeCloud product branding.
+
 A properly branded and functioning Drive experience requires its own approved Drive iconography and design, plus actual web-client integration with the GC UI contract. The imported OpenCloud web theme is a preserved compatibility baseline, not evidence of completed GoreeCloud UI adoption. A source-only rename, new color value, or isolated theme file cannot satisfy the interface acceptance gates.
 
 Governance document migrations remain in progress. Current owner approval does **not** by itself prove older canonical instructions, legacy consumer references, and all repository artifacts have been reconciled; verify affected records before relying on them.
