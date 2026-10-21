@@ -18,6 +18,11 @@ jobs:
           test -s docs/UPSTREAM.md
           test -s docs/UPSTREAM-README.md
           test -s docs/GOREECLOUD-FORK.md
+          test -s docs/GC-UI-FOUNDATIONS-THEME.md
+          test -s services/web/assets/themes/goreecloud/theme.json
+          test -s scripts/generate_gc_ui_theme.py
+          python3 -m py_compile scripts/generate_gc_ui_theme.py
+          grep -q '/themes/opencloud/theme.json' services/web/pkg/config/defaults/defaultconfig.go
           test ! -e docs/FORK-TO-NATIVE.md
           grep -q '^module github.com/opencloud-eu/opencloud$' go.mod
           grep -q '61ae13a1fea0bb8a36bf4b96c1d222fc84aeaa9c' docs/UPSTREAM.md

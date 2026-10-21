@@ -14,6 +14,7 @@
 - **Current architecture:** Go server and services derived from OpenCloud; upstream module names and protocol behavior remain intact for compatibility.
 - **Web frontend:** The separate upstream [OpenCloud web client](https://github.com/opencloud-eu/web) is AGPL-3.0, and **has not been imported** into this server repository. Evaluate web-client licensing, architecture, and build independently.
 - **Maintenance and quality:** [docs/GOREECLOUD-FORK.md](docs/GOREECLOUD-FORK.md), [docs/UPSTREAM.md](docs/UPSTREAM.md), and the [preserved upstream README](docs/UPSTREAM-README.md).
+- **GoreeCloud UI developer preview:** An [opt-in GC UI Foundations theme](docs/GC-UI-FOUNDATIONS-THEME.md) supplies tested light/dark semantic colors through the existing web theme handler; the official Drive visual identity and full web-client UI adoption are not yet complete.
 
 ## Build the imported server
 

@@ -32,6 +32,17 @@ but cannot guarantee partial-content requests. Rewritten HTML entry points
 retain their `no-cache` policy and are served from their rewritten contents.
 These behaviors concern **web UI assets**, not user-file download APIs.
 
+### Optional GoreeCloud UI Foundations theme
+
+A source-verified GoreeCloud UI semantic color mapping is embedded as a
+**developer-only opt-in preview** at `/themes/goreecloud/theme.json`.
+It preserves upstream share-role compatibility and temporary upstream logo
+assets; **it is not an approved, complete Drive interface or finished branding**.
+
+On an isolated developer instance, set `WEB_UI_THEME_PATH=/themes/goreecloud/theme.json`.
+To roll back, unset it or use `/themes/opencloud/theme.json`.
+See [GoreeCloud UI theme provenance and acceptance](../../docs/GC-UI-FOUNDATIONS-THEME.md).
+
 ## Custom Compiled Web Assets
 
 If you want to use your custom compiled web client assets instead of the embedded ones,
