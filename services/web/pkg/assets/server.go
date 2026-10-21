@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"strconv"
+	"time"
 
 	"golang.org/x/net/html"
 )
@@ -68,10 +70,22 @@ func (f *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "could not process HTML asset", http.StatusInternalServerError)
 			return
 		}
-		_, _ = w.Write(buf.Bytes())
+		// This is a transformed HTML document, so serve the transformed bytes
+		// rather than the upstream file's size or modification timestamp.
+		http.ServeContent(w, r, s.Name(), time.Time{}, bytes.NewReader(buf.Bytes()))
 	default:
-		// Static assets can be large. Stream without first copying their entire
-		// contents into a process-local buffer.
+		// Most embedded assets are seekable. ServeContent supports byte ranges,
+		// HEAD, and conditional responses without buffering the file.
+		// Preserve streaming compatibility for alternate non-seekable fs.FS
+		// implementations, including remote and generated asset sources.
+		if _, err := asset.Seek(0, io.SeekCurrent); err == nil {
+			http.ServeContent(w, r, s.Name(), s.ModTime(), asset)
+			return
+		}
+		if r.Method == http.MethodHead {
+			w.Header().Set("Content-Length", strconv.FormatInt(s.Size(), 10))
+			return
+		}
 		_, _ = io.Copy(w, asset)
 	}
 }

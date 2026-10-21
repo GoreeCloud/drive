@@ -20,6 +20,18 @@ reuse. SVG uploads remain disallowed under the inherited server capabilities.
 This validation is separate from authorization, which still requires
 `Logo.Write` permission.
 
+### Embedded asset HTTP behavior (GoreeCloud Fork)
+
+The built-in asset server now supports standard `GET`, `HEAD`, conditional
+`If-Modified-Since` and byte-range responses for seekable web assets. This
+allows clients to resume supported static resource transfers and use browser
+cache validators without preloading complete assets into process memory.
+
+Generated/non-seekable assets retain bounded streaming and `HEAD` behavior,
+but cannot guarantee partial-content requests. Rewritten HTML entry points
+retain their `no-cache` policy and are served from their rewritten contents.
+These behaviors concern **web UI assets**, not user-file download APIs.
+
 ## Custom Compiled Web Assets
 
 If you want to use your custom compiled web client assets instead of the embedded ones,

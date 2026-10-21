@@ -23,6 +23,12 @@ jobs:
           grep -q '61ae13a1fea0bb8a36bf4b96c1d222fc84aeaa9c' docs/UPSTREAM.md
           grep -q '\*\*GoreeCloud Fork\*\*' README.md
           grep -q 'GitHub-hosted upstream-linked fork' docs/UPSTREAM.md
+          grep -q 'GoreeCloud UI' README.md
+          grep -q 'GoreeCloud/gc-ui' docs/GOREECLOUD-FORK.md
+          if grep -Ei 'Glaze|Fork-to-Native' README.md docs/GOREECLOUD-FORK.md docs/UPSTREAM.md; then
+            echo 'Retired development or UI authority found in active Drive documentation' >&2
+            exit 1
+          fi
           git diff --check
   theme-tests:
     runs-on: ubuntu-latest

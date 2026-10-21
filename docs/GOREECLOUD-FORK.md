@@ -17,7 +17,7 @@ This is currently a pinned source **snapshot** in an independent repository, not
 | F0 — Source baseline | Preserve OpenCloud server and GoreeCloud repository history | Pinned revision, notices, source/license inspection |
 | F1 — Upstream maintenance | Track relevant security advisories and upstream fixes, integrate reviewed patches | Diff review, compatibility and regression tests, audit log |
 | F2 — Reliability | Keep core files, shares, permissions, versioning, search, WebDAV/Graph, administration, and recovery working | Reproducible builds, isolated runtime tests, restore trials |
-| F3 — GoreeCloud experience | Implement GoreeCloud identity and Glaze where appropriate, responsive accessibility, functional navigation | Screenshot-led audit, keyboard/mobile/light/dark and E2E tests |
+| F3 — GoreeCloud experience | Implement GoreeCloud identity and GoreeCloud UI where appropriate, responsive accessibility, functional navigation | Screenshot-led audit, keyboard/mobile/light/dark and E2E tests |
 | F4 — Ecosystem interoperability | Integrate supported GoreeCloud platform capabilities without breaking upstream interfaces | Authoritative contract checks, integration tests and safe fallbacks |
 | F5 — Release | Produce a secure, observable, recoverable self-hosted service | Full security/privacy, recovery, performance and release validation |
 
@@ -31,7 +31,7 @@ This is currently a pinned source **snapshot** in an independent repository, not
 
 ## GoreeCloud platform systems
 
-Assess each system against its current canonical contract: GoreeCloud Manager, Privacy Shield, Wardveil Security, Everkeep, Glaze, GoreeCloud Mesh, GoreeCloud Identity, GoreeCloud Policy, and GoreeCloud Observability.
+Assess each system against its current canonical contract: GoreeCloud Manager, Privacy Shield, Wardveil Security, Everkeep, GoreeCloud UI, GoreeCloud Mesh, GoreeCloud Identity, GoreeCloud Policy, and GoreeCloud Observability.
 
 **No system is presumed integrated merely because it appears above.** Feature implementations must be exercised in real workflows before being marked complete.
 
@@ -44,8 +44,14 @@ Assess each system against its current canonical contract: GoreeCloud Manager, P
 - Keep example passwords, certificates and insecure development configurations out of deployed environments; never assume upstream defaults are hardened.
 - Ensure the GoreeCloud experience is substantively designed and functional rather than a logo-only reskin. Run screenshot-led UI audits when evaluating user interfaces.
 
-## Governance discrepancy to resolve
+## Current owner-approved development and interface authority
 
-The owner's explicit designation for GoreeCloud Drive is **GoreeCloud Fork**. The current cross-product `Policy — Native Application and Platform System Conformance` v3.2 describes only **Native** and **Fork-to-Native** as approved permanent development pathways. The current product direction and that policy conflict. This document records the owner's direction, **not** a claim that global policy has already been revised. Reconcile through the authorized governance process before making contradictory portfolio-wide claims.
+The owner-approved [Policy — Native and GoreeCloud Fork Development and GoreeCloud UI](https://docs.google.com/document/d/1vQVPdwUZdiq95anbMXlg7mmVVAirXoITyc35GiYrD8E/edit) (effective October 20, 2026) explicitly recognizes **Native** and **GoreeCloud Fork** as the only two development models. It recognizes this OpenCloud-derived product as **GoreeCloud Fork**. The former conversion requirement is historical and does not govern this project.
 
-**Stable release is not assumed** from a successful upstream import or from documentation changes.
+**GoreeCloud UI (GC UI)**, with its canonical implementation in [GoreeCloud/gc-ui](https://github.com/GoreeCloud/gc-ui), is the sole active interface/experience authority. Prior design-system names are retired; they do not authorize new UI. The current [Foundations 1.0.1](https://github.com/GoreeCloud/gc-ui/releases/tag/foundations-v1.0.1) supports a scoped semantic-token/color/theme-controller foundation, **not** an accepted full Drive interface. Do not use the predecessor as a design-source shortcut.
+
+A properly branded and functioning Drive experience requires its own approved Drive iconography and design, plus actual web-client integration with the GC UI contract. The imported OpenCloud web theme is a preserved compatibility baseline, not evidence of completed GoreeCloud UI adoption. A source-only rename, new color value, or isolated theme file cannot satisfy the interface acceptance gates.
+
+Governance document migrations remain in progress. Current owner approval does **not** by itself prove older canonical instructions, legacy consumer references, and all repository artifacts have been reconciled; verify affected records before relying on them.
+
+**Stable release is not assumed** from a successful upstream import, documentation changes, or a passing development build.

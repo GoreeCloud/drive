@@ -2,7 +2,7 @@
 
 **GoreeCloud Drive** is GoreeCloud's self-hosted file storage, synchronization, sharing, and collaboration platform. This project is an owner-designated **GoreeCloud Fork** of the Apache-2.0-licensed [OpenCloud server](https://github.com/opencloud-eu/opencloud).
 
-> **Development status — foundation import.** The OpenCloud-derived backend has been imported and compiled in development, but this is not a Stable release, deployed service, completed Glaze experience, or verified production configuration. Review security settings before using real data.
+> **Development status — foundation import.** The OpenCloud-derived backend has been imported and compiled in development, but this is not a Stable release, deployed service, completed GoreeCloud UI experience, or verified production configuration. Review security settings before using real data.
 
 ## Source and architecture
 
@@ -28,7 +28,7 @@ The upstream development binary is `opencloud/bin/opencloud`; its inherited CLI 
 
 ## GoreeCloud fork development
 
-Preserve and improve OpenCloud's existing capabilities; apply the approved GoreeCloud visual identity and Glaze UI where implemented; strengthen security, reliability, privacy, and accessibility; integrate approved GoreeCloud platform capabilities; and maintain a reviewable path for upstream security updates and fixes. Upstream code is a foundation to maintain, not a temporary architecture that must be rewritten.
+Preserve and improve OpenCloud's existing capabilities; apply the approved GoreeCloud visual identity and GoreeCloud UI where implemented; strengthen security, reliability, privacy, and accessibility; integrate approved GoreeCloud platform capabilities; and maintain a reviewable path for upstream security updates and fixes. Upstream code is a foundation to maintain, not a temporary architecture that must be rewritten.
 
 All changes must preserve upstream attribution, relevant third-party licenses, user data, sharing behavior, API/client compatibility, and rollback paths. **Do not claim features, integrations, tests, or deployments without evidence.**
 
