@@ -5,6 +5,21 @@ Note that clients will respond with a connection error if the web service is not
 
 The web service also provides a minimal API for branding functionality like changing the logo shown.
 
+### Logo upload safety (GoreeCloud Fork)
+
+Uploaded logos must be valid JPEG, PNG or GIF images, with a matching extension and
+declared content type. The service reads the actual image format and dimensions
+rather than trusting the multipart header alone. Uploads must be at most **5 MiB**,
+with images no larger than **4096 pixels per dimension** or **16 megapixels**.
+The overall multipart request has a small additional allowance for form metadata.
+
+The logo endpoint returns HTTP 400 for malformed or unsupported images, HTTP 413
+for oversized uploads, and HTTP 500 for unexpected storage errors. Existing
+image uploads that violate these limits may need resizing or conversion before
+reuse. SVG uploads remain disallowed under the inherited server capabilities.
+This validation is separate from authorization, which still requires
+`Logo.Write` permission.
+
 ## Custom Compiled Web Assets
 
 If you want to use your custom compiled web client assets instead of the embedded ones,
