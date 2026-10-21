@@ -62,6 +62,19 @@ unknown project space.
 
 The companion upstream component regression tests are carried in the
 AGPL-3.0 source tree and run in GoreeCloud's independent web-client CI.
+
+### Search route registration cleanup
+
+A separate selective fix from upstream web commit
+`8297034c331dc1014a1b795100f0d7b9464b9b63` drops the retired
+standalone `/search/list` route registration from the Search application.
+The Search app identity, dynamic extensions and provider extension points
+remain registered. The legacy `App.vue` source remains dormant for now but
+is **not imported or routed** by the application registration. A new
+focused Vitest registration test verifies that the app remains present while
+no standalone route is published; full frontend/Go/browser regression checks
+run on the rebuilt embedded client. This is a scoped navigation repair,
+not an API search-service redesign or full upstream version bump.
 This is a focused UX/access-state correction, **not** an API authorization
 policy change, claim of a fully authenticated deployment, or blanket upgrade
 of the pinned upstream web revision. The upstream watch retains the original
