@@ -60,6 +60,8 @@ class DavFixture(BaseHTTPRequestHandler):
         data = self.rfile.read(int(self.headers.get("Content-Length", "0")))
         existed = self.path in self.server.files
         self.server.files[self.path] = data
+        if self.server.fail_after_put:
+            return self.respond(503)
         return self.respond(204 if existed else 201)
 
     def do_DELETE(self):
@@ -78,6 +80,7 @@ class AcceptanceGateTests(unittest.TestCase):
         self.server.files = {}
         self.server.redirect = False
         self.server.corrupt = False
+        self.server.fail_after_put = False
         self.server.delete_count = 0
         self.worker = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.worker.start()
@@ -107,6 +110,13 @@ class AcceptanceGateTests(unittest.TestCase):
             mutation_contract(DavClient(Config(self.url, AUTH, mutate=True)))
         self.assertEqual(self.server.delete_count, 1)
         self.assertEqual(self.server.files, {})
+
+    def test_server_error_after_write_still_cleans_test_file(self):
+        self.server.fail_after_put = True
+        with self.assertRaisesRegex(AcceptanceError, "HTTP 503"):
+            mutation_contract(DavClient(Config(self.url, AUTH, mutate=True)))
+        self.assertEqual(self.server.files, {})
+        self.assertEqual(self.server.delete_count, 1)
 
     def test_existing_disposable_name_is_never_overwritten_or_deleted(self):
         name = ".goreecloud-acceptance-existing.txt"

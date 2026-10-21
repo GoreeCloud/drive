@@ -23,8 +23,9 @@ provided WebDAV collection. By default it makes **no mutations**:
 When the disposable mutation gate is explicitly enabled, the probe also
 performs a unique dot-prefixed test-file create, authenticated download with
 exact bytes, anonymous access denial, overwrite, exact bytes again, delete,
-and missing-after-delete check. It tries deletion after every successful
-create, even if an intermediate assertion fails.
+and missing-after-delete check. It tries deletion after **every attempted PUT**,
+even when a server persists bytes but reports an error. It refuses to
+replace a pre-existing file with the generated fixture name.
 
 ## Mandatory isolation controls
 

@@ -162,11 +162,13 @@ def mutation_contract(client: DavClient, *, name: str | None = None) -> list[str
     original = ("GoreeCloud Drive acceptance " + secrets.token_hex(16)).encode()
     replacement = ("GoreeCloud Drive update " + secrets.token_hex(16)).encode()
     created = False
+    attempted_put = False
     error = None
     # Fail closed if this supposedly disposable name already exists.
     # Never overwrite unrelated data even if a name collision occurs.
     _require_status(client.request("GET", url), {404, 410}, "Disposable name preflight")
     try:
+        attempted_put = True
         response = client.request("PUT", url, body=original)
         _require_status(response, {200, 201, 204}, "Creating disposable file")
         created = True
@@ -183,9 +185,13 @@ def mutation_contract(client: DavClient, *, name: str | None = None) -> list[str
     except AcceptanceError as exc:
         error = exc
     finally:
-        if created:
+        if attempted_put:
+            # A server can persist a PUT and still return an error or time out.
+            # The preflight established that this unique name was absent.
             removed = client.request("DELETE", url)
-            if removed.status not in (200, 202, 204):
+            successful_cleanup = removed.status in (200, 202, 204)
+            safely_absent = not created and removed.status in (404, 410)
+            if not (successful_cleanup or safely_absent):
                 raise AcceptanceError(f"Cleanup failed for disposable file {filename}: HTTP {removed.status}")
     if error:
         raise error
