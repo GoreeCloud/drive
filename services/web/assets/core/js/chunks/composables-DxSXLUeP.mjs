@@ -1,1 +1,0 @@
-import{Tn as e}from"./design-system-components-B9Ig1ZoY.mjs";import"./src-BIT07PTE.mjs";import{Kr as t}from"./Yjs-DvPBRrv6.mjs";var n={id:`app.search.provider`,extensionType:`search`,multiple:!0},r=()=>e(()=>[n]),i=()=>{let r=t();return e(()=>r.requestExtensions(n).map(({searchProvider:e})=>e))};export{r as n,i as t};

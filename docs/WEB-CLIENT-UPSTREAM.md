@@ -75,6 +75,32 @@ focused Vitest registration test verifies that the app remains present while
 no standalone route is published; full frontend/Go/browser regression checks
 run on the rebuilt embedded client. This is a scoped navigation repair,
 not an API search-service redesign or full upstream version bump.
+
+### Dynamic locale updates for search and route titles
+
+Selectively backport upstream OpenCloud web commit
+`73a26af3d6a281023a5d9e5550a14fb36263c449` (AGPL-3.0) into the
+Search location filter and runtime App, with the corresponding upstream
+Vitest regression cases. The selected search scope retains its stable ID
+while its visible label updates from the reactive translated options when
+the language changes. Route-generated document titles likewise update to
+the new language **without falsely announcing a page navigation** to
+assistive technologies. Explicitly view-owned titles, such as a file
+preview title, remain untouched by the language-change watcher.
+
+Tests cover both the German-to-English label/title transition and
+preservation of view-owned titles. The test's mocked theme name uses
+**GoreeCloud Drive** for project-specific branding; the runtime still
+uses the configured theme name. The built JS is regenerated from the
+frozen upstream lockfile, and the independent frontend CI gates the
+targeted Vue tests, compiled asset reproducibility, Go embedding and
+desktop/mobile Chromium static delivery. These are component/browser
+build checks, **not** evidence of end-to-end localization in an
+authenticated deployed environment.
+
+The pinned upstream source and advisory baselines do not change as
+part of this targeted correction. Roll back by reverting the scoped
+Vue/tests/generated-assets commit and rebuilding the previous revision.
 This is a focused UX/access-state correction, **not** an API authorization
 policy change, claim of a fully authenticated deployment, or blanket upgrade
 of the pinned upstream web revision. The upstream watch retains the original
