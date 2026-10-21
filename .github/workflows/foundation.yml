@@ -37,3 +37,16 @@ jobs:
         run: go test -mod=vendor ./services/web/pkg/assets ./services/web/pkg/theme
       - name: Vet web asset and theme packages
         run: go vet -mod=vendor ./services/web/pkg/assets ./services/web/pkg/theme
+  announcement-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Reject invalid announcement payloads
+        run: go test -mod=vendor ./services/web/pkg/announcement
+      - name: Vet announcement handlers
+        run: go vet -mod=vendor ./services/web/pkg/announcement
