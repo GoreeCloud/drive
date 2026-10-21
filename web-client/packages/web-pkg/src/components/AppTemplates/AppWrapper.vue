@@ -1,0 +1,974 @@
+<template>
+  <main :id="applicationId" class="app-wrapper h-full rounded-xl" @keydown.esc.stop="closeApp">
+    <h1 class="sr-only" v-text="pageTitle" />
+    <app-loading-spinner v-if="isLoading" />
+    <no-content-message
+      v-else-if="isNotFoundError"
+      id="app-wrapper-not-found-message"
+      img-src="images/illustrations/404.svg"
+    >
+      <template #message>
+        <span v-text="$gettext('Resource not found')" />
+      </template>
+      <template #callToAction>
+        <p
+          class="mt-0"
+          v-text="
+            $gettext('We went looking everywhere, but were unable to find the selected resource.')
+          "
+        />
+      </template>
+    </no-content-message>
+    <error-screen v-else-if="error" :message="error.message" />
+    <div v-else class="flex size-full">
+      <slot
+        class="app-wrapper-content size-full"
+        :class="{ 'w-[calc(100%-360px)]': isSideBarOpen && !isMobile }"
+        v-bind="slotAttrs"
+      />
+      <file-side-bar :space="space" />
+    </div>
+  </main>
+</template>
+
+<script setup lang="ts">
+import {
+  Ref,
+  defineComponent,
+  onBeforeUnmount,
+  ref,
+  unref,
+  watch,
+  computed,
+  onMounted,
+  markRaw
+} from 'vue'
+import { DateTime } from 'luxon'
+import { useTask } from 'vue-concurrency'
+import { useGettext } from 'vue3-gettext'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
+
+import AppTopBar from '../AppTopBar.vue'
+import ErrorScreen from './PartialViews/ErrorScreen.vue'
+import NoContentMessage from '../NoContentMessage.vue'
+import AppLoadingSpinner from '../AppLoadingSpinner.vue'
+import FileSideBar from '../SideBar/FileSideBar.vue'
+import {
+  UrlForResourceOptions,
+  queryItemAsString,
+  useAppDefaults,
+  useClientService,
+  useRoute,
+  useRouteParam,
+  useRouteQuery,
+  useSelectedResources,
+  useSideBar,
+  useModals,
+  useMessages,
+  useSpacesStore,
+  useAppsStore,
+  useConfigStore,
+  useResourcesStore,
+  FileContentOptions,
+  FileActionOptions,
+  useLoadingService,
+  useFileActionsSave,
+  useSharesStore,
+  useEventBus,
+  Action,
+  Modifier,
+  Key,
+  useAppMeta,
+  useGetResourceContext,
+  useAuthStore,
+  useKeyboardActions,
+  useExtensionRegistry,
+  CustomComponentExtension,
+  useFileActions
+} from '../../composables'
+import { AppWrapperSlotHandlers, AppWrapperSlotProps, YjsOptions } from './types'
+import { useAppWrapperYjs } from './useAppWrapperYjs'
+import {
+  Resource,
+  SpaceResource,
+  buildIncomingShareResource,
+  call,
+  isPersonalSpaceResource,
+  isProjectSpaceResource,
+  isPublicSpaceResource,
+  isShareSpaceResource,
+  PublicSpaceResource
+} from '@opencloud-eu/web-client'
+import { DavPermission } from '@opencloud-eu/web-client/webdav'
+import { HttpError } from '@opencloud-eu/web-client'
+import { dirname } from 'path'
+import { useFileActionsOpenWithApp } from '../../composables'
+import { UnsavedChangesModal } from '../Modals'
+import {
+  formatFileSize,
+  getSharedDriveItem,
+  setCurrentUserShareSpacePermissions
+} from '../../helpers'
+import toNumber from 'lodash-es/toNumber'
+import { useIsMobile } from '@opencloud-eu/design-system/composables'
+import { storeToRefs } from 'pinia'
+import { DriveItem } from '@opencloud-eu/web-client/graph/generated'
+
+const {
+  applicationId,
+  urlForResourceOptions = null,
+  fileContentOptions = null,
+  wrappedComponent = null,
+  importResourceWithExtension = () => null,
+  disableAutoSave = false,
+  yjs = null
+} = defineProps<{
+  applicationId: string
+  urlForResourceOptions?: UrlForResourceOptions
+  fileContentOptions?: FileContentOptions
+  wrappedComponent?: ReturnType<typeof defineComponent>
+  importResourceWithExtension?: (resource: Resource) => string
+  disableAutoSave?: boolean
+  /**
+   * Opt the app into collaborative editing. When set, the wrapper owns the
+   * Yjs session and hands `ydoc` / `awareness` to the wrapped component.
+   */
+  yjs?: YjsOptions
+}>()
+
+const { $gettext, current: currentLanguage } = useGettext()
+const appsStore = useAppsStore()
+const { showMessage, showErrorMessage } = useMessages()
+const router = useRouter()
+const currentRoute = useRoute()
+const clientService = useClientService()
+const loadingService = useLoadingService()
+const { getResourceContext } = useGetResourceContext()
+const { selectedResources } = useSelectedResources()
+const { dispatchModal } = useModals()
+const spacesStore = useSpacesStore()
+const authStore = useAuthStore()
+const configStore = useConfigStore()
+const resourcesStore = useResourcesStore()
+const sharesStore = useSharesStore()
+const eventBus = useEventBus()
+const { isMobile } = useIsMobile()
+const sidebarStore = useSideBar()
+const { isSideBarOpen } = storeToRefs(sidebarStore)
+const { getExtensionActions } = useFileActions()
+
+const { actions: openWithAppActions } = useFileActionsOpenWithApp({
+  appId: applicationId
+})
+
+const noResourceLoading = computed(() => {
+  // component has its own way to load the resource(s)
+  return Boolean(wrappedComponent.emits?.includes('update:resource'))
+})
+
+const resource: Ref<Resource> = ref()
+const space: Ref<SpaceResource> = ref()
+const currentETag = ref('')
+const url = ref('')
+const loading = ref(!unref(noResourceLoading))
+const loadingError: Ref<Error> = ref()
+// apps that load their files themselves (e.g. the preview) report errors via the folder loading
+const error = computed(() => unref(loadingError) || unref(folderLoadingError))
+const isNotFoundError = computed(() => (unref(error) as HttpError)?.statusCode === 404)
+const isReadOnly = ref(false)
+const serverContent = ref<unknown>()
+const currentContent = ref<unknown>()
+/**
+ * Id of the resource `currentContent` was fetched for. `resource` is swapped
+ * ahead of the body; the Yjs session's `enabled` gate compares the two.
+ */
+const contentResourceId = ref<string>()
+let deleteResourceEventToken = ''
+let appOnDeleteResourceCallback: (() => void) | null = null
+let appOnSaveCallback: ((content: unknown) => void | Promise<void>) | null = null
+
+const extensionRegistry = useExtensionRegistry()
+const topBarExtensionId = 'app.app-wrapper.app-top-bar'
+const appBarExtension = computed<CustomComponentExtension[]>(() => {
+  if (unref(loading) || unref(loadingError) || !unref(resource)) {
+    return []
+  }
+  return [
+    {
+      id: topBarExtensionId,
+      type: 'customComponent',
+      extensionPointIds: ['app.runtime.header.left'],
+      content: markRaw(AppTopBar),
+      componentProps: () => ({
+        resource: unref(resource),
+        isReadOnly: unref(effectiveReadOnly),
+        isEditor: unref(isEditor),
+        hasAutoSave: !disableAutoSave,
+        mainActions: [unref(saveAction)],
+        dropDownMenuSections: unref(dropDownMenuSections),
+        dropDownActionOptions: unref(actionOptions),
+        onClose: () => {
+          closeApp()
+        }
+      })
+    }
+  ]
+})
+
+const unregisterAppBarExtension = extensionRegistry.registerExtensions(appBarExtension)
+
+const isEditor = computed(() => {
+  // A collaborative app drives its content through the Yjs session instead
+  // of `update:currentContent`, so opting in makes it an editor.
+  return Boolean(yjs) || Boolean(wrappedComponent.emits?.includes('update:currentContent'))
+})
+
+const hasProp = (name: string) => {
+  return Boolean(Object.keys(wrappedComponent.props).includes(name))
+}
+
+const preventUnload = (e: Event) => {
+  e.preventDefault()
+}
+
+const {
+  applicationConfig,
+  closeApp,
+  currentFileContext,
+  getFileContents,
+  getFileInfo,
+  getUrlForResource,
+  putFileContents,
+  replaceInvalidFileRoute,
+  revokeUrl,
+  activeFiles,
+  loadFolderForFileContext,
+  isFolderLoading,
+  folderLoadingError
+} = useAppDefaults({
+  applicationId
+})
+
+const isDirty = computed(() => {
+  if (unref(isReadOnly)) {
+    return false
+  }
+  return unref(currentContent) !== unref(serverContent)
+})
+
+const {
+  session: yjsSession,
+  isSessionReady,
+  effectiveReadOnly,
+  isConflicted,
+  reconcileConflict
+} = useAppWrapperYjs({
+  yjs,
+  applicationId,
+  resource,
+  isReadOnly,
+  isDirty,
+  loading,
+  loadingError,
+  contentResourceId,
+  currentContent,
+  serverContent,
+  currentETag,
+  currentFileContext,
+  fileContentOptions,
+  getFileContents,
+  putFileContents,
+  applySavedResource,
+  runSaveCallback,
+  onConflict: showExternalUpdateConflict,
+  isSaving: () => saveFileTask.isRunning,
+  onExternalUpdateApplied: () => {
+    showMessage({
+      title: $gettext('File updated'),
+      desc: $gettext(
+        'This file was updated outside this window. The editor now shows the latest version.'
+      )
+    })
+  }
+})
+
+// Keep the loading screen up until the Yjs session is synced and hydrated,
+// so the wrapped component always mounts against a ready Y.Doc. A load
+// failure short-circuits: it leaves the session disabled, so waiting on it
+// would keep the error screen from ever showing.
+const isLoading = computed(() => {
+  if (unref(error)) return false
+  return unref(loading) || !unref(isSessionReady)
+})
+
+/**
+ * The Yjs session reports doc changes debounced, so `isDirty` and `currentContent` lag behind
+ * the last keystrokes. Let it catch up before deciding about unsaved work.
+ */
+async function flushPendingContent() {
+  await yjsSession?.flushContent()
+}
+
+// `beforeunload` can't wait for a flush, so a pending change counts as unsaved there.
+// Remote edits leave changes pending for read-only users too, which they can't save anyway.
+const hasUnsavedWork = computed(
+  () => unref(isDirty) || (!unref(isReadOnly) && unref(yjsSession?.hasPendingContent))
+)
+
+watch(hasUnsavedWork, (dirty) => {
+  // Prevent reload if there are changes
+  if (dirty) {
+    window.addEventListener('beforeunload', preventUnload)
+  } else {
+    window.removeEventListener('beforeunload', preventUnload)
+  }
+})
+
+const { applicationMeta } = useAppMeta({ applicationId, appsStore })
+
+const fileSizeLimit = computed(() => {
+  return unref(applicationMeta).meta?.fileSizeLimit
+})
+
+const pageTitle = computed(() => {
+  const { name: appName } = unref(applicationMeta)
+
+  return $gettext(`%{appName} for %{fileName}`, {
+    appName: $gettext(appName),
+    fileName: unref(unref(currentFileContext).fileName)
+  })
+})
+
+const driveAliasAndItem = useRouteParam('driveAliasAndItem')
+const fileIdQueryItem = useRouteQuery('fileId')
+const fileId = computed(() => {
+  return queryItemAsString(unref(fileIdQueryItem))
+})
+
+const addMissingDriveAliasAndItem = async () => {
+  const id = unref(fileId)
+  const { space, path } = await getResourceContext(id)
+  const driveAliasAndItem = space.getDriveAliasAndItem({ path } as Resource)
+
+  if (isPersonalSpaceResource(space)) {
+    return router.push({
+      params: {
+        ...unref(currentRoute).params,
+        driveAliasAndItem
+      },
+      query: {
+        ...unref(currentRoute).query,
+        fileId: id,
+        contextRouteName: 'files-spaces-generic',
+        contextRouteParams: { driveAliasAndItem: dirname(driveAliasAndItem) } as any
+      }
+    })
+  }
+
+  // user context routes would end the guest session
+  let contextRouteName = path === '/' ? 'files-shares-with-me' : 'files-spaces-generic'
+  if (authStore.isGuestContext) {
+    contextRouteName = path === '/' ? 'files-guest-shares' : 'files-guest-link'
+  }
+
+  return router.push({
+    params: {
+      ...unref(currentRoute).params,
+      driveAliasAndItem
+    },
+    query: {
+      ...unref(currentRoute).query,
+      fileId: id,
+      contextRouteName,
+      ...(isShareSpaceResource(space) && { shareId: space.id }),
+      contextRouteParams: {
+        driveAliasAndItem: dirname(driveAliasAndItem)
+      } as any,
+      contextRouteQuery: {
+        ...(isShareSpaceResource(space) && { shareId: space.id })
+      } as any
+    }
+  })
+}
+
+const loadResourceTask = useTask(function* (signal) {
+  try {
+    if (!unref(driveAliasAndItem)) {
+      yield addMissingDriveAliasAndItem()
+    }
+    space.value = unref(unref(currentFileContext).space)
+    const currentSpace = unref(space)
+    if (isPublicSpaceResource(currentSpace) && currentSpace.publicLinkPermission === undefined) {
+      // the link permission and file id are only known if the link got resolved beforehand,
+      // which isn't the case when the app is opened directly (e.g. on page reload)
+      const { fileId, publicLinkPermission } = (yield* call(
+        clientService.webdav.getFileInfo(currentSpace, {}, { signal })
+      )) as PublicSpaceResource
+      Object.assign(currentSpace, { fileId, publicLinkPermission })
+    }
+    const fileInfo = yield getFileInfo(unref(currentFileContext), { signal })
+    resource.value = fileInfo
+
+    if (isShareSpaceResource(unref(space))) {
+      // FIXME: As soon the backend exposes oc-remote-id via webdav, remove the assignment below
+      unref(resource).remoteItemId = unref(space).id
+
+      let sharedDriveItem: DriveItem
+      const resourceIsShareSpaceRoot = unref(resource).id === unref(resource).remoteItemId
+      if (!unref(space).graphPermissions || resourceIsShareSpaceRoot) {
+        // we need to load the driveItem either for the share space permissions if not yet loaded,
+        // or for building the incoming share resource if it is a share space root
+        sharedDriveItem = yield* call(
+          getSharedDriveItem({
+            graphClient: clientService.graphAuthenticated,
+            spacesStore,
+            space: unref(space)
+          })
+        )
+      }
+
+      if (sharedDriveItem) {
+        // set graph permissions on the current share space
+        setCurrentUserShareSpacePermissions({
+          sharesStore,
+          spacesStore,
+          space: unref(space),
+          sharedDriveItem
+        })
+
+        if (resourceIsShareSpaceRoot) {
+          resource.value = {
+            ...fileInfo,
+            ...buildIncomingShareResource({
+              graphRoles: sharesStore.graphRoles,
+              driveItem: sharedDriveItem,
+              serverUrl: configStore.serverUrl
+            }),
+            tags: fileInfo.tags // tags are always [] in Graph API, hence take them from webdav
+          }
+        }
+      }
+    }
+    if (isProjectSpaceResource(unref(space))) {
+      yield spacesStore.loadGraphPermissions({
+        ids: [unref(space).id],
+        graphClient: clientService.graphAuthenticated
+      })
+    }
+    resourcesStore.initResourceList({ currentFolder: null, resources: [unref(resource)] })
+    selectedResources.value = [unref(resource)]
+  } catch (e) {
+    console.error(e)
+    loadingError.value = e
+    loading.value = false
+  }
+}).restartable()
+
+const loadFileTask = useTask(function* (signal) {
+  try {
+    const newExtension = importResourceWithExtension(unref(resource))
+    if (newExtension) {
+      const timestamp = DateTime.local().toFormat('yyyyMMddHHmmss')
+      const targetPath = `${unref(resource).name}_${timestamp}.${newExtension}`
+      if (
+        !(yield clientService.webdav.copyFiles(
+          unref(space),
+          unref(resource),
+          unref(space),
+          {
+            path: targetPath
+          },
+          { signal }
+        ))
+      ) {
+        throw new Error($gettext('Importing failed'))
+      }
+
+      resource.value = { path: targetPath } as Resource
+    }
+
+    if (replaceInvalidFileRoute(currentFileContext, unref(resource))) {
+      return
+    }
+
+    isReadOnly.value = ![DavPermission.Updateable, DavPermission.FileUpdateable].some(
+      (p) => (unref(resource).permissions || '').indexOf(p) > -1
+    )
+
+    if (unref(hasProp('currentContent'))) {
+      const fileContentsResponse = yield* call(
+        getFileContents(unref(currentFileContext), { ...fileContentOptions, signal })
+      )
+      serverContent.value = currentContent.value = fileContentsResponse.body
+      currentETag.value = fileContentsResponse.headers['OC-ETag']
+      contentResourceId.value = unref(resource).id
+    }
+
+    if (unref(hasProp('url'))) {
+      url.value = yield getUrlForResource(unref(space), unref(resource), {
+        ...urlForResourceOptions,
+        signal
+      })
+    }
+  } catch (e) {
+    console.error(e)
+    loadingError.value = e
+  } finally {
+    loading.value = false
+  }
+}).restartable()
+
+watch(
+  () => {
+    const ctx = unref(currentFileContext)
+    return `${ctx.path}::${ctx.itemId ?? ''}`
+  },
+  async () => {
+    if (!unref(noResourceLoading)) {
+      // Reset for the new file: `resource` swaps well before the matching
+      // body arrives, and the Yjs session must not hydrate the new room from
+      // the previous file's content.
+      loading.value = true
+      loadingError.value = undefined
+
+      await loadResourceTask.perform()
+      if (unref(loadingError)) {
+        return
+      }
+
+      if (unref(fileSizeLimit) && toNumber(unref(resource).size) > unref(fileSizeLimit)) {
+        dispatchModal({
+          title: $gettext('File exceeds %{threshold}', {
+            threshold: formatFileSize(unref(fileSizeLimit), currentLanguage)
+          }),
+          message: $gettext(
+            '%{resource} exceeds the recommended size of %{threshold} for editing, and may cause performance issues.',
+            {
+              resource: unref(resource).name,
+              threshold: formatFileSize(unref(fileSizeLimit), currentLanguage)
+            }
+          ),
+          confirmText: $gettext('Continue'),
+          onCancel: () => {
+            closeApp()
+          },
+          onConfirm: () => {
+            loadFileTask.perform()
+          }
+        })
+      } else {
+        loadFileTask.perform()
+      }
+    } else {
+      space.value = unref(unref(currentFileContext).space)
+    }
+  },
+  { immediate: true }
+)
+
+const errorPopup = (error: HttpError) => {
+  console.error(error)
+  showErrorMessage({
+    title: $gettext('An error occurred'),
+    desc: error.message,
+    errors: [error]
+  })
+}
+
+const autosavePopup = () => {
+  showMessage({ title: $gettext('File autosaved') })
+}
+
+function showExternalUpdateConflict(response: Response = null) {
+  errorPopup(
+    new HttpError(
+      $gettext(
+        'This file was updated outside this window. Please copy your changes, save the file under a new name (»Save As...«) or reload the page to discard your changes.'
+      ),
+      response
+    )
+  )
+}
+
+/**
+ * Single landing point for a successful write: updates the etag for the next
+ * `If-Match`, the local `resource` ref and the store. `saved` is the PUT's
+ * response, or null when only the etag is known. A function declaration, so
+ * it is hoisted above the `useAppWrapperYjs` call that captures it.
+ */
+function applySavedResource(etag: string, saved: Resource | null = null) {
+  currentETag.value = etag
+  const current = unref(resource)
+  if (!current) return
+  const updated: Resource = { ...current, etag }
+  if (saved) {
+    updated.size = saved.size
+    updated.mdate = saved.mdate
+  }
+  resource.value = updated
+  resourcesStore.upsertResource(saved ?? updated)
+}
+
+const saveFileTask = useTask(function* () {
+  const newContent = unref(currentContent)
+  // Pin the Y.Doc state behind `newContent`; the doc usually moves on while
+  // the PUT is in flight.
+  yjsSession?.beginSave()
+  try {
+    const putFileContentsResponse = yield putFileContents(currentFileContext, {
+      content: newContent as string | ArrayBuffer,
+      previousEntityTag: unref(currentETag)
+    })
+    serverContent.value = newContent
+    applySavedResource(putFileContentsResponse.etag, putFileContentsResponse)
+    return true
+  } catch (e) {
+    // 409 / 412: `previousEntityTag` didn't match what the server has. A
+    // connected Yjs session can resolve that itself when the conflicting
+    // write came from a peer in the room, because our Y.Doc already holds
+    // that peer's edits.
+    if (e.statusCode === 412 || e.statusCode === 409) {
+      if (yield* reconcileConflict(newContent)) {
+        return true
+      }
+      showExternalUpdateConflict(e.response)
+      return false
+    }
+    switch (e.statusCode) {
+      case 401:
+      case 403:
+        errorPopup(new HttpError($gettext("You're not authorized to save this file"), e.response))
+        break
+      case 423:
+        errorPopup(
+          new HttpError(
+            $gettext(
+              'This file is locked by another application and cannot be saved. Copy your changes, or save the file under a new name (»Save As...«).'
+            ),
+            e.response
+          )
+        )
+        break
+      case 507:
+        const space = spacesStore.spaces.find(
+          (space) => space.id === unref(resource).storageId && isProjectSpaceResource(space)
+        )
+        if (space) {
+          errorPopup(
+            new HttpError(
+              $gettext('Insufficient quota on "%{spaceName}" to save this file', {
+                spaceName: space.name
+              }),
+              e.response
+            )
+          )
+          break
+        }
+        errorPopup(new HttpError($gettext('Insufficient quota for saving this file'), e.response))
+        break
+      default:
+        errorPopup(new HttpError('', e.response))
+    }
+    return false
+  }
+}).drop()
+
+async function runSaveCallback(content: unknown): Promise<void> {
+  try {
+    await appOnSaveCallback?.(content)
+  } catch (e) {
+    console.error('Error running the app save callback', e)
+  }
+}
+
+const save = async () => {
+  await flushPendingContent()
+  const saved = await saveFileTask.perform()
+  if (!saved) {
+    return false
+  }
+
+  await runSaveCallback(unref(serverContent))
+  return true
+}
+
+const { saveAction, saveAsAction } = useFileActionsSave({
+  content: currentContent,
+  isDirty,
+  isEditor,
+  isReadOnly,
+  onSave: async () => {
+    await save()
+  }
+})
+
+let autosaveIntervalId: ReturnType<typeof setInterval> = null
+onMounted(() => {
+  deleteResourceEventToken = eventBus.subscribe(
+    'runtime.resource.deleted',
+    onDeleteResourceCallback
+  )
+
+  if (resourcesStore.ancestorMetaData?.['/'] && unref(space)) {
+    const clearAncestorData = resourcesStore.ancestorMetaData['/'].spaceId !== unref(space).id
+    if (clearAncestorData) {
+      // clear ancestor data in case the user switched spaces (e.g. by opening a file via search results)
+      resourcesStore.setAncestorMetaData({})
+    }
+  }
+
+  if (!unref(isEditor)) {
+    return
+  }
+  const editorOptions = configStore.options.editor
+  if (editorOptions.autosaveEnabled && !disableAutoSave) {
+    autosaveIntervalId = setInterval(
+      async () => {
+        await flushPendingContent()
+        if (!unref(isDirty) || unref(isConflicted)) {
+          return
+        }
+        await save()
+        autosavePopup()
+      },
+      (editorOptions.autosaveInterval || 120) * 1000
+    )
+  }
+})
+onBeforeUnmount(() => {
+  eventBus.unsubscribe('runtime.resource.deleted', deleteResourceEventToken)
+  unregisterAppBarExtension()
+
+  if (!loadingService.isLoading) {
+    window.removeEventListener('beforeunload', preventUnload)
+  }
+
+  if (unref(hasProp('url'))) {
+    revokeUrl(url.value)
+  }
+
+  if (!unref(isEditor)) {
+    return
+  }
+
+  clearInterval(autosaveIntervalId)
+  autosaveIntervalId = null
+})
+
+const { bindKeyAction } = useKeyboardActions({ skipDisabledKeyBindingsCheck: true })
+bindKeyAction({ modifier: Modifier.Ctrl, primary: Key.S }, async () => {
+  await flushPendingContent()
+  if (!unref(isDirty)) {
+    return
+  }
+  save()
+})
+
+const actionOptions = computed<FileActionOptions>(() => ({
+  space: unref(space),
+  resources: [unref(resource)]
+}))
+
+/**
+ * The interceptor is used to save the file automatically when in dirty state,
+ * so the downloaded file equals the current state
+ */
+const downloadFileActionInterceptor = async (
+  args: FileActionOptions,
+  originalAction: Action<FileActionOptions>['handler']
+) => {
+  await flushPendingContent()
+  if (unref(isDirty)) {
+    if (unref(isConflicted)) {
+      showMessage({
+        title: $gettext('Unsaved changes are not included'),
+        desc: $gettext(
+          'This file was updated outside this window, so the download does not contain your unsaved changes.'
+        ),
+        status: 'warning'
+      })
+    } else {
+      await save()
+      autosavePopup()
+    }
+  }
+  originalAction(args)
+}
+
+const onDeleteResourceCallback = (deletedResources: Resource[]) => {
+  const currentResourceDeleted = deletedResources.find(
+    (deletedResource) => deletedResource.id === unref(resource).id
+  )
+
+  if (!currentResourceDeleted) {
+    return
+  }
+
+  if (appOnDeleteResourceCallback) {
+    return appOnDeleteResourceCallback()
+  }
+
+  closeApp()
+}
+
+const menuItemsPrimary = computed(() => {
+  return [...unref(openWithAppActions), unref(saveAction), unref(saveAsAction)].filter((item) =>
+    item.isVisible(unref(actionOptions))
+  )
+})
+
+const extensionContextActions = computed(() =>
+  getExtensionActions('global.files.context-actions').filter((a) =>
+    a.isVisible(unref(actionOptions))
+  )
+)
+
+const deleteAction = computed(() => {
+  return unref(extensionContextActions).find((action) => action.name === 'delete')
+})
+const downloadAction = computed(() => {
+  const action = unref(extensionContextActions).find((action) => action.name === 'download-file')
+  if (!action) {
+    return undefined
+  }
+
+  return {
+    ...action,
+    handler: (args: FileActionOptions) => downloadFileActionInterceptor(args, action.handler)
+  }
+})
+const menuItemsSecondary = computed(() =>
+  unref(extensionContextActions).filter((action) => action.category === 'secondary')
+)
+const menuItemsTertiary = computed(() =>
+  // only show download and delete actions to reduce clutter in the tertiary menu
+  [unref(downloadAction), unref(deleteAction)].filter(Boolean)
+)
+const menuItemsQuaternary = computed(() =>
+  unref(extensionContextActions).filter((action) => action.category === 'quaternary')
+)
+const dropDownMenuSections = computed(() => {
+  const sections = []
+
+  if (unref(menuItemsPrimary).length) {
+    sections.push({
+      name: 'primary',
+      items: unref(menuItemsPrimary)
+    })
+  }
+  if (unref(menuItemsSecondary).length) {
+    sections.push({
+      name: 'secondary',
+      items: unref(menuItemsSecondary)
+    })
+  }
+  if (unref(menuItemsTertiary).length) {
+    sections.push({
+      name: 'tertiary',
+      items: unref(menuItemsTertiary)
+    })
+  }
+  if (unref(menuItemsQuaternary).length) {
+    sections.push({
+      name: 'quaternary',
+      items: unref(menuItemsQuaternary)
+    })
+  }
+  return sections
+})
+
+// Returns instead of calling `next`: the guard has to await the flush first, and an async guard
+// that also takes `next` is rejected by the router.
+onBeforeRouteLeave(async () => {
+  await flushPendingContent()
+  if (!unref(isDirty)) {
+    unregisterAppBarExtension()
+    return true
+  }
+
+  return new Promise<boolean>((resolve) => {
+    dispatchModal({
+      title: $gettext('Unsaved changes'),
+      customComponent: markRaw(UnsavedChangesModal),
+      focusTrapInitial: '.oc-modal-body-actions-confirm',
+      hideConfirmButton: true,
+      hideCancelButton: true,
+      customComponentAttrs: () => {
+        return {
+          closeCallback: () => {
+            unregisterAppBarExtension()
+            resolve(true)
+          }
+        }
+      },
+      async onConfirm() {
+        if (!(await save())) {
+          resolve(false)
+          return
+        }
+        unregisterAppBarExtension()
+        resolve(true)
+      },
+      onCancel() {
+        resolve(false)
+      }
+    })
+  })
+})
+
+const slotAttrs = computed<AppWrapperSlotProps & AppWrapperSlotHandlers>(() => ({
+  url: unref(url),
+  space: unref(unref(currentFileContext).space),
+  resource: unref(resource),
+  activeFiles: unref(activeFiles),
+  isDirty: unref(isDirty),
+  isReadOnly: unref(effectiveReadOnly),
+  applicationConfig: unref(applicationConfig),
+  currentFileContext: unref(currentFileContext),
+  currentContent: unref(currentContent) as string,
+  isFolderLoading: unref(isFolderLoading),
+
+  // Non-null by the time a collaborative app renders: `isLoading` covers the
+  // session being synced and hydrated. Always null for other apps.
+  ydoc: unref(yjsSession?.ydoc) ?? null,
+  awareness: unref(yjsSession?.awareness) ?? null,
+  yjsStatus: unref(yjsSession?.status) ?? null,
+
+  'onUpdate:resource': (value: Resource) => {
+    space.value = unref(unref(currentFileContext).space)
+
+    // FIXME: As soon the backend exposes oc-remote-id via webdav, remove the assignment below
+    resource.value = {
+      ...value,
+      ...(isShareSpaceResource(unref(space)) && {
+        remoteItemId: unref(space).id
+      })
+    }
+
+    selectedResources.value = [unref(resource)]
+  },
+  'onUpdate:currentContent': (value: unknown) => {
+    currentContent.value = value
+  },
+
+  'onRegister:onDeleteResourceCallback': (value: () => void) => {
+    appOnDeleteResourceCallback = value
+  },
+
+  'onRegister:onSaveCallback': (value: (content: unknown) => void | Promise<void>) => {
+    appOnSaveCallback = value
+  },
+
+  'onDelete:resource': () => {
+    unref(deleteAction)?.handler(unref(actionOptions))
+  },
+
+  onSave: async () => {
+    await save()
+  },
+  onClose: closeApp,
+  loadFolderForFileContext,
+  revokeUrl,
+  getUrlForResource
+}))
+</script>

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>window.WEB_APPS_MAP = {"web-app-admin-settings":"./web-app-admin-settings-BGQ-dMxT.mjs","web-app-app-store":"./web-app-app-store-0LJlFc8L.mjs","web-app-contacts":"./web-app-contacts-CeAivlMR.mjs","web-app-epub-reader":"./web-app-epub-reader-Dg3TvY7_.mjs","web-app-external":"./web-app-external-DKVqRvqC.mjs","web-app-files":"./web-app-files-CKmhO9tg.mjs","web-app-mail":"./web-app-mail-DcKkAixL.mjs","web-app-ocm":"./web-app-ocm-Bk5FYei1.mjs","web-app-office-settings":"./web-app-office-settings-bpdSJsXH.mjs","web-app-pdf-viewer":"./web-app-pdf-viewer-Cmm3RyDn.mjs","web-app-preview":"./web-app-preview-zNuQ0pnN.mjs","web-app-rclone-crypt":"./web-app-rclone-crypt-C4PsiGwg.mjs","web-app-search":"./web-app-search-aS0GiyMD.mjs","web-app-text-editor":"./web-app-text-editor-DqzTsSB3.mjs","web-app-webfinger":"./web-app-webfinger-Coig7P4M.mjs"}</script>
+
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0" />
+    <meta http-equiv="x-ua-compatible" content="IE=edge" />
+
+    <title>GoreeCloud Drive</title>
+    <link rel="manifest" href="manifest.json" crossorigin="use-credentials" />
+    <link rel="icon" href="img/favicon.svg" />
+    <link
+      rel="preload"
+      href="./assets/inter-latin-BESSSfwG.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <script>
+      // Apply background color early to prevent a white flash on dark theme before theme loading finishes.
+      function applyInitialThemeBackground() {
+        var themeIsDarkStorageKey = 'oc_currentThemeIsDark'
+        var storedThemeIsDark = null
+
+        try {
+          storedThemeIsDark = localStorage.getItem(themeIsDarkStorageKey)
+        } catch (error) {
+          // Ignore storage access errors and fall back to system preference.
+        }
+
+        var isDark = storedThemeIsDark === 'true'
+        var prefersDark =
+          window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+        var shouldUseDark = storedThemeIsDark !== null ? isDark : prefersDark
+        var themeName = shouldUseDark ? 'dark' : 'light'
+        var backgroundColor = shouldUseDark ? '#1d2021' : '#f6f8fa'
+
+        document.documentElement.style.colorScheme = themeName
+        document.documentElement.dataset.colorScheme = themeName
+        document.documentElement.style.backgroundColor = backgroundColor
+      }
+
+      applyInitialThemeBackground()
+    </script>
+    <style>html,body{height:100%}.splash-banner{flex-direction:column;justify-content:center;align-items:center;height:100%;padding:.5rem;display:flex}.splash-hide{display:none}#loading{width:32px;height:32px;animation:1s linear infinite spin;display:inline-block;position:relative}#loading:after{content:"";box-sizing:border-box;background-color:#0000;border:1px solid;border-bottom-color:#0000;border-radius:9999px;width:100%;height:100%;display:block;position:relative}#splash-incompatible button{margin:30px 0}@keyframes spin{to{transform:rotate(360deg)}}</style>
+    <script type="module" crossorigin src="./js/index.html-BhMisXok.mjs"></script>
+    <link rel="modulepreload" crossorigin href="./js/chunks/rolldown-runtime-BCiCTKAo.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/design-system-components-B9Ig1ZoY.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/yjs-vendor-Cy919w9-.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/zod-BRPA64bK.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/uuid-DDdyfk2q.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/web-client-Dx7gFyOM.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/applyCustomProp-Dj0PE6ai.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/oidc-client-ts-D2S1-MQb.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/Yjs-DvPBRrv6.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/src-BIT07PTE.mjs">
+    <link rel="modulepreload" crossorigin href="./js/chunks/escape-CnzpF1A8.mjs">
+    <link rel="stylesheet" crossorigin href="./assets/style-Dg-GEeKt.css">
+  </head>
+  <body>
+    <div id="splash-incompatible" class="splash-banner splash-hide">
+      <div class="oc-card border rounded-sm w-lg max-w-full text-center">
+        <div class="oc-card-header">
+          <div class="flex items-center justify-center">
+            <span class="mr-2 oc-icon oc-icon-m oc-icon-warning">
+              <svg
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <g xmlns="http://www.w3.org/2000/svg">
+                  <path fill="none" d="M0 0h24v24H0z"></path>
+                  <path
+                    d="M12 22C6.477 22 2 17.523 2 12S6.477 2 12 2s10 4.477 10 10-4.477 10-10 10zm0-2a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM11 7h2v2h-2V7zm0 4h2v6h-2v-6z"
+                  ></path>
+                </g>
+              </svg>
+            </span>
+            <h2>Your browser is not supported</h2>
+          </div>
+        </div>
+        <div class="oc-card-body oc-link-resolve-error-message">
+          <p>Your browser version is considered old and might not work correctly.</p>
+          <p>We recommend you update to a newer version.</p>
+        </div>
+      </div>
+      <button
+        class="oc-button oc-button-primary oc-button-primary-filled rounded-sm"
+        onclick="forceOldBrowser()"
+      >
+        I want to continue anyway
+      </button>
+    </div>
+    <div id="splash-loading" class="splash-banner splash-hide">
+      <span id="loading" aria-hidden="true" tabindex="-1"></span>
+    </div>
+    <div id="opencloud"></div>
+    <noscript>
+      <div class="splash-banner"><h3>Please enable JavaScript</h3></div>
+    </noscript>
+    <script>
+      // Disable Zod's JIT compilation probe to prevent CSP 'unsafe-eval' console errors.
+      globalThis.__zod_globalConfig = { jitless: true }
+
+      function runtimeLoaded() {}
+
+      var loader = document.getElementById('splash-loading')
+      var browserError = document.getElementById('splash-incompatible')
+
+      var loaderTimer = setTimeout(function () {
+        loader.classList.remove('splash-hide')
+      }, 500)
+
+      function displayError() {
+        loader.classList.remove('splash-hide')
+        loader.innerHTML = '<h3>Oops. Something went wrong.</h3>'
+      }
+
+      function displayBrowserError() {
+        clearTimeout(loaderTimer)
+        removeLoadingSpinner()
+        browserError.classList.remove('splash-hide')
+      }
+
+      function forceOldBrowser() {
+        localStorage.setItem(
+          'forceAllowOldBrowser',
+          JSON.stringify({ expiry: new Date().getTime() + 30 * 24 * 60 * 60 * 1000 })
+        )
+        browserError.classList.add('splash-hide')
+        init()
+      }
+
+      function removeLoadingSpinner() {
+        if (!loader.classList.contains('splash-hide')) {
+          loader.classList.add('splash-hide')
+        }
+      }
+
+      function init() {
+        window.runtimeLoaded = function (runtime) {
+          clearTimeout(loaderTimer)
+          runtime.bootstrapApp('config.json', removeLoadingSpinner).catch((error) => {
+            removeLoadingSpinner()
+            runtime.bootstrapErrorApp(error)
+          })
+        }
+      }
+
+      const supportedBrowsers = /Edge?\/(14[2-9]|1[5-9]\d|[2-9]\d{2}|\d{4,})\.\d+(\.\d+|)|Firefox\/(12[1-9]|1[3-9]\d|[2-9]\d{2}|\d{4,})\.\d+(\.\d+|)|Chrom(ium|e)\/(10[3-9]|1[1-9]\d|[2-9]\d{2}|\d{4,})\.\d+(\.\d+|)|(Maci|X1{2}).+ Version\/(18\.([5-9]|\d{2,})|(19|[2-9]\d|\d{3,})\.\d+)([,.]\d+|)( \(\w+\)|)( Mobile\/\w+|) Safari\/|Chrome.+OPR\/(12[3-9]|1[3-9]\d|[2-9]\d{2}|\d{4,})\.\d+\.\d+|(CPU[ +]OS|iPhone[ +]OS|CPU[ +]iPhone|CPU IPhone OS|CPU iPad OS)[ +]+(15[._]([6-9]|\d{2,})|(1[6-9]|[2-9]\d|\d{3,})[._]\d+)([._]\d+|)|Android:?[ /-](15[1-9]|1[6-9]\d|[2-9]\d{2}|\d{4,})(\.\d+|)(\.\d+|)|Android.+Firefox\/(15[3-9]|1[6-9]\d|[2-9]\d{2}|\d{4,})\.\d+(\.\d+|)|Android.+Chrom(ium|e)\/(15[1-9]|1[6-9]\d|[2-9]\d{2}|\d{4,})\.\d+(\.\d+|)|Android.+(UC? ?Browser|UCWEB|U3)[ /]?(15\.([5-9]|\d{2,})|(1[6-9]|[2-9]\d|\d{3,})\.\d+)\.\d+|SamsungBrowser\/(29|[3-9]\d|\d{3,})\.\d+/
+      const forceAllowOldBrowser = localStorage.getItem('forceAllowOldBrowser') || false
+      const validForceAllowOldBrowser =
+        forceAllowOldBrowser &&
+        JSON.parse(localStorage.getItem('forceAllowOldBrowser')).expiry > new Date().getTime()
+
+      if (forceAllowOldBrowser && !validForceAllowOldBrowser)
+        localStorage.removeItem('forceAllowOldBrowser')
+
+      if (!validForceAllowOldBrowser && !supportedBrowsers.test(navigator.userAgent)) {
+        displayBrowserError()
+      } else {
+        init()
+      }
+
+      var scriptTags = document.getElementsByTagName('script')
+      for (let i = 0; i < scriptTags.length; i++) {
+        if (scriptTags[i].src) {
+          scriptTags[i].onerror = displayError
+        }
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,117 @@
+import { markRaw } from 'vue'
+import { join } from 'path'
+import { Resource } from '@opencloud-eu/web-client'
+import { ResolveConflict, ResolveStrategy } from './types'
+import { useModals } from '../../../composables'
+import SpaceMoveInfoModal from '../../../components/Modals/SpaceMoveInfoModal.vue'
+import ResourceConflictModal from '../../../components/Modals/ResourceConflictModal.vue'
+import type { Language } from 'vue3-gettext'
+
+export interface FileConflict {
+  resource: Resource
+  existingResource?: Resource
+  strategy?: ResolveStrategy
+}
+
+export class ConflictDialog {
+  constructor(
+    protected $gettext: Language['$gettext'],
+    protected $ngettext: Language['$ngettext']
+  ) {}
+
+  async resolveAllConflicts(
+    resourcesToMove: Resource[],
+    targetFolder: Resource,
+    targetFolderResources: Resource[]
+  ): Promise<FileConflict[]> {
+    // Collect all conflicting resources
+    const allConflicts: FileConflict[] = []
+    for (const resource of resourcesToMove) {
+      const targetFilePath = join(targetFolder.path, resource.name)
+      const existingResource = targetFolderResources.find((r) => r.path === targetFilePath)
+      if (existingResource) {
+        allConflicts.push({ resource, existingResource, strategy: null })
+      }
+    }
+    let count = 0
+    let doForAllConflicts = false
+    let doForAllConflictsStrategy = null
+    const resolvedConflicts: FileConflict[] = []
+    for (const conflict of allConflicts) {
+      // Resolve conflicts accordingly
+      if (doForAllConflicts) {
+        conflict.strategy = doForAllConflictsStrategy
+        resolvedConflicts.push(conflict)
+        continue
+      }
+
+      // Resolve next conflict
+      const conflictsLeft = allConflicts.length - count
+      const result: ResolveConflict = await this.resolveFileExists(
+        conflict.resource,
+        conflictsLeft,
+        false,
+        false,
+        conflict.existingResource.isFolder
+      )
+      conflict.strategy = result.strategy
+      resolvedConflicts.push(conflict)
+      count += 1
+
+      // User checked 'do for all x conflicts'
+      if (!result.doForAllConflicts) {
+        continue
+      }
+      doForAllConflicts = true
+      doForAllConflictsStrategy = result.strategy
+    }
+    return resolvedConflicts
+  }
+
+  resolveFileExists(
+    resource: Resource,
+    conflictCount: number,
+    suggestMerge = false,
+    separateSkipHandling = false, // separate skip-handling between files and folders
+    existingIsFolder = resource.isFolder
+  ): Promise<ResolveConflict> {
+    const { dispatchModal } = useModals()
+
+    return new Promise<ResolveConflict>((resolve) => {
+      dispatchModal({
+        title: existingIsFolder
+          ? this.$gettext('Folder already exists')
+          : this.$gettext('File already exists'),
+        hideConfirmButton: true,
+        hideCancelButton: true,
+        customComponent: markRaw(ResourceConflictModal),
+        customComponentAttrs: () => ({
+          resource,
+          conflictCount,
+          suggestMerge,
+          separateSkipHandling,
+          existingIsFolder,
+          callbackFn: (conflict: ResolveConflict) => {
+            resolve(conflict)
+          }
+        })
+      })
+    })
+  }
+
+  resolveDoCopyInsteadOfMoveForSpaces(): Promise<boolean> {
+    const { dispatchModal } = useModals()
+
+    return new Promise<boolean>((resolve) => {
+      dispatchModal({
+        title: this.$gettext('Copy here?'),
+        customComponent: markRaw(SpaceMoveInfoModal),
+        confirmText: this.$gettext('Copy here'),
+        onCancel: () => {
+          resolve(false)
+        },
+        onConfirm: () => Promise.resolve(resolve(true))
+      })
+    })
+  }
+}

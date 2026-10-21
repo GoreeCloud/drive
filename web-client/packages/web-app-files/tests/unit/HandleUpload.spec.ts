@@ -1,0 +1,655 @@
+import Uppy, { State, UnknownPlugin } from '@uppy/core'
+import { HandleUpload } from '../../src/HandleUpload'
+import { mock, mockDeep } from 'vitest-mock-extended'
+import { Resource, SpaceResource } from '@opencloud-eu/web-client'
+import { RouteLocationNormalizedLoaded } from 'vue-router'
+import { computed, ref, unref } from 'vue'
+import {
+  ClientService,
+  UppyService,
+  locationSpacesGeneric,
+  useUserStore,
+  useMessages,
+  useSpacesStore,
+  useExtensionRegistry,
+  useResourcesStore,
+  resolveVaultEngine,
+  VaultEngine,
+  OcUppyFile,
+  OcUppyMeta,
+  OcUppyBody
+} from '@opencloud-eu/web-pkg'
+import { Language } from 'vue3-gettext'
+import { createTestingPinia } from '@opencloud-eu/web-test-helpers'
+
+let getConflictsMock = vi.fn()
+let displayOverwriteDialogMock = vi.fn()
+
+vi.mock('../../src/helpers/resource/actions', () => {
+  const UploadResourceConflict = vi.fn(
+    class {
+      getConflicts = getConflictsMock
+      displayOverwriteDialog = displayOverwriteDialogMock
+    }
+  )
+  return { UploadResourceConflict }
+})
+
+vi.mock('@opencloud-eu/web-pkg', async (importOriginal) => ({
+  ...(await importOriginal<any>()),
+  resolveVaultEngine: vi.fn()
+}))
+
+type UppyPlugin = UnknownPlugin<OcUppyMeta, OcUppyBody, Record<string, unknown>>
+
+describe('HandleUpload', () => {
+  it('installs the handleUpload callback when files are being added', () => {
+    const { instance, mocks } = getWrapper()
+    instance.install()
+    expect(mocks.uppy.on).toHaveBeenCalledWith('files-added', instance.handleUpload)
+  })
+  it('uninstalls the handleUpload callback when files are being added', () => {
+    const { instance, mocks } = getWrapper()
+    instance.uninstall()
+    expect(mocks.uppy.off).toHaveBeenCalledWith('files-added', instance.handleUpload)
+  })
+  it('removes files from the uppy upload queue', () => {
+    const { instance, mocks } = getWrapper()
+    const fileToRemove = mock<OcUppyFile>()
+    instance.removeFilesFromUpload([fileToRemove])
+    expect(mocks.uppy.removeFile).toHaveBeenCalledWith(fileToRemove.id)
+  })
+  describe('method prepareFiles', () => {
+    it('correctly prepares all files that need to be uploaded', () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      const fileToUpload = mock<OcUppyFile>({ name: 'name' })
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      const processedFiles = instance.prepareFiles([fileToUpload], uploadFolder)
+
+      const route = unref(mocks.opts.route)
+
+      expect(processedFiles[0].tus.endpoint).toEqual('/')
+      expect(processedFiles[0].meta.name).toEqual(fileToUpload.name)
+      expect(processedFiles[0].meta.spaceId).toEqual(unref(mocks.opts.space).id)
+      expect(processedFiles[0].meta.spaceName).toEqual(unref(mocks.opts.space).name)
+      expect(processedFiles[0].meta.driveAlias).toEqual(unref(mocks.opts.space).driveAlias)
+      expect(processedFiles[0].meta.driveType).toEqual(unref(mocks.opts.space).driveType)
+      expect(processedFiles[0].meta.currentFolder).toEqual(uploadFolder.path)
+      expect(processedFiles[0].meta.currentFolderId).toEqual(uploadFolder.id)
+      expect(processedFiles[0].meta.tusEndpoint).toEqual(uploadFolder.path)
+      expect(processedFiles[0].meta.relativeFolder).toEqual('')
+      expect(processedFiles[0].meta.routeName).toEqual(route.name)
+      expect(processedFiles[0].meta.routeDriveAliasAndItem).toEqual(route.params.driveAliasAndItem)
+      expect(processedFiles[0].meta.routeShareId).toEqual(route.query.shareId)
+    })
+    it('includes the folder name in the "relativeFolder" prop for folder files', () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      const fileToUpload = mock<OcUppyFile>({ name: 'name', type: 'directory' })
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      const processedFiles = instance.prepareFiles([fileToUpload], uploadFolder)
+
+      expect(processedFiles[0].meta.relativeFolder).toEqual(`/${fileToUpload.name}`)
+    })
+    it('sets name and mtime meta for public file drop uploads', () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      mocks.opts.resourcesStore.currentFolder = null
+      unref(mocks.opts.route).params.token = 'public-token'
+      mocks.opts.clientService.webdav.getPublicFileUrl.mockReturnValue('https://public/')
+
+      const lastModified = 1_700_000_000_000
+      const fileToUpload = mock<OcUppyFile>({
+        name: 'name',
+        data: { lastModified } as File
+      })
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      const processedFiles = instance.prepareFiles([fileToUpload], uploadFolder)
+
+      expect(processedFiles[0].meta.name).toEqual(fileToUpload.name)
+      expect(processedFiles[0].meta.mtime).toEqual(lastModified / 1000)
+    })
+    it('sets a separate endpoint per file for public file drop uploads without tus', () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(undefined)
+      mocks.opts.resourcesStore.currentFolder = null
+      unref(mocks.opts.route).params.token = 'public-token'
+      mocks.opts.clientService.webdav.getPublicFileUrl.mockReturnValue('https://public/')
+
+      const filesToUpload = ['a.txt', 'b.txt', 'c.txt'].map((name) =>
+        mock<OcUppyFile>({ id: name, name, type: 'text/plain', data: {} as File })
+      )
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      const processedFiles = instance.prepareFiles(filesToUpload, uploadFolder)
+
+      expect(processedFiles.map(({ xhrUpload }) => xhrUpload.endpoint)).toEqual([
+        'https://public/a.txt',
+        'https://public/b.txt',
+        'https://public/c.txt'
+      ])
+    })
+  })
+  describe('method createDirectoryTree', () => {
+    it('creates a directory for a single file with a relative folder given', async () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      const relativeFolder = '/relativeFolder'
+      const fileToUpload = mock<OcUppyFile>({ name: 'name', meta: { relativeFolder } })
+      const createdFolder = mock<Resource>()
+      mocks.opts.clientService.webdav.createFolder.mockResolvedValue(createdFolder)
+
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      const { filesToUpload } = await instance.createDirectoryTree([fileToUpload], uploadFolder)
+
+      expect(mocks.opts.uppyService.publish).toHaveBeenCalledWith(
+        'uploadSuccess',
+        expect.objectContaining({
+          name: relativeFolder.split('/')[1],
+          type: 'folder',
+          meta: expect.objectContaining({
+            spaceId: unref(mocks.opts.space).id,
+            spaceName: unref(mocks.opts.space).name,
+            driveAlias: unref(mocks.opts.space).driveAlias,
+            driveType: unref(mocks.opts.space).driveType,
+            currentFolder: uploadFolder.path,
+            currentFolderId: uploadFolder.id,
+            relativeFolder: '',
+            routeName: fileToUpload.meta.routeName,
+            routeDriveAliasAndItem: fileToUpload.meta.routeDriveAliasAndItem,
+            routeShareId: fileToUpload.meta.routeShareId,
+            fileId: createdFolder.fileId,
+            isFolder: true
+          })
+        })
+      )
+      expect(mocks.opts.clientService.webdav.createFolder).toHaveBeenCalledTimes(1)
+      expect(mocks.opts.clientService.webdav.createFolder).toHaveBeenCalledWith(
+        unref(mocks.opts.space),
+        {
+          path: relativeFolder,
+          fetchFolder: true
+        }
+      )
+      expect(filesToUpload.length).toBe(1)
+    })
+    it('filters out files whose folders could not be created', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      const relativeFolder = '/relativeFolder'
+      const fileToUpload = mock<OcUppyFile>({ name: 'name', meta: { relativeFolder } })
+      mocks.opts.clientService.webdav.createFolder.mockRejectedValue({})
+
+      const { filesToUpload } = await instance.createDirectoryTree([fileToUpload], mock<Resource>())
+
+      expect(mocks.opts.uppyService.publish).toHaveBeenCalledWith('uploadError', expect.anything())
+      expect(mocks.uppy.removeFile).toHaveBeenCalled()
+      expect(filesToUpload.length).toBe(0)
+    })
+    it('emits uploadSuccess for a folder that already exists (merge scenario)', async () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      const folderName = 'relativeFolder'
+      const relativeFolder = `/${folderName}`
+      const fileToUpload = mock<OcUppyFile>({ name: 'name', meta: { relativeFolder } })
+      mocks.opts.clientService.webdav.createFolder.mockRejectedValue({ statusCode: 405 })
+
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      const { filesToUpload } = await instance.createDirectoryTree([fileToUpload], uploadFolder, [
+        folderName
+      ])
+
+      expect(mocks.opts.uppyService.publish).toHaveBeenCalledWith(
+        'uploadSuccess',
+        expect.objectContaining({
+          name: folderName,
+          type: 'folder',
+          meta: expect.objectContaining({ isFolder: true })
+        })
+      )
+      expect(mocks.opts.uppyService.publish).not.toHaveBeenCalledWith(
+        'uploadError',
+        expect.anything()
+      )
+      expect(filesToUpload.length).toBe(1)
+    })
+    it('does not emit uploadSuccess for a folder that exists but was not merged by the user', async () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      const relativeFolder = '/relativeFolder'
+      const fileToUpload = mock<OcUppyFile>({ name: 'name', meta: { relativeFolder } })
+      mocks.opts.clientService.webdav.createFolder.mockRejectedValue({ statusCode: 405 })
+
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      // mergedFolders is empty - user did not choose merge
+      const { filesToUpload } = await instance.createDirectoryTree([fileToUpload], uploadFolder, [])
+
+      expect(mocks.opts.uppyService.publish).not.toHaveBeenCalledWith(
+        'uploadSuccess',
+        expect.anything()
+      )
+      expect(filesToUpload.length).toBe(1)
+    })
+    it('returns folder files and removes them from the uppy upload files', async () => {
+      const { instance, mocks } = getWrapper()
+      mocks.uppy.getPlugin.mockReturnValue(mock<UppyPlugin>())
+      const relativeFolder = '/relativeFolder'
+      const fileToUpload = mock<OcUppyFile>({
+        name: 'directory',
+        type: 'directory',
+        meta: { relativeFolder }
+      })
+      const createdFolder = mock<Resource>()
+      mocks.opts.clientService.webdav.createFolder.mockResolvedValue(createdFolder)
+
+      const uploadFolder = mock<Resource>({ id: '1', path: '/' })
+      const { filesToUpload, folderFiles } = await instance.createDirectoryTree(
+        [fileToUpload],
+        uploadFolder
+      )
+
+      expect(instance.uppy.removeFile).toHaveBeenCalled()
+      expect(mocks.opts.clientService.webdav.createFolder).toHaveBeenCalledTimes(1)
+      expect(filesToUpload.length).toBe(0)
+      expect(folderFiles.length).toBe(1)
+    })
+  })
+  describe('method handleUpload', () => {
+    it('prepares files and eventually triggers the upload in uppy', async () => {
+      const { instance, mocks } = getWrapper()
+      const prepareFilesSpy = vi.spyOn(instance, 'prepareFiles')
+      await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+      expect(prepareFilesSpy).toHaveBeenCalledTimes(1)
+      expect(mocks.opts.uppyService.publish).toHaveBeenCalledWith(
+        'addedForUpload',
+        expect.anything()
+      )
+      expect(mocks.opts.uppyService.uploadFiles).toHaveBeenCalledTimes(1)
+    })
+    describe('quota check', () => {
+      it('checks quota if check enabled', async () => {
+        const { instance } = getWrapper()
+        const checkQuotaExceededSpy = vi.spyOn(instance, 'checkQuotaExceeded')
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+        expect(checkQuotaExceededSpy).toHaveBeenCalled()
+      })
+      it('does not check quota if check disabled', async () => {
+        const { instance } = getWrapper({ quotaCheckEnabled: false })
+        const checkQuotaExceededSpy = vi.spyOn(instance, 'checkQuotaExceeded')
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+        expect(checkQuotaExceededSpy).not.toHaveBeenCalled()
+      })
+      it.each([
+        { size: 100, remaining: 90, driveType: 'project', quotaExceeded: true },
+        { size: 10, remaining: 90, driveType: 'project', quotaExceeded: false },
+        { size: 100, remaining: 90, driveType: 'personal', quotaExceeded: true },
+        { size: 10, remaining: 90, driveType: 'personal', quotaExceeded: false }
+      ])(
+        'returns a correct result after quota has been checked for own personal and project spaces',
+        ({ size, remaining, driveType, quotaExceeded }) => {
+          const space = mock<SpaceResource>({
+            driveType,
+            id: '1',
+            spaceQuota: { remaining },
+            isOwner: () => true
+          })
+          const { instance } = getWrapper({ spaces: [space] })
+          const result = instance.checkQuotaExceeded([
+            mock<OcUppyFile>({
+              name: 'name',
+              meta: { spaceId: '1', routeName: locationSpacesGeneric.name as string },
+              data: { size } as Blob
+            })
+          ])
+          expect(result).toBe(quotaExceeded)
+        }
+      )
+      it.each([
+        { remaining: 100, quotaExceeded: true },
+        { remaining: 0, quotaExceeded: true },
+        { remaining: 130, quotaExceeded: false }
+      ])(
+        'sums up the size of all files of a multi-file upload (remaining: $remaining)',
+        ({ remaining, quotaExceeded }) => {
+          const space = mock<SpaceResource>({
+            driveType: 'project',
+            id: '1',
+            spaceQuota: { remaining },
+            isOwner: () => true
+          })
+          const { instance } = getWrapper({ spaces: [space] })
+          const files = ['a', 'b', 'c'].map((name) =>
+            mock<OcUppyFile>({
+              name,
+              meta: { spaceId: '1', routeName: locationSpacesGeneric.name as string },
+              data: { size: 40 } as Blob
+            })
+          )
+          expect(instance.checkQuotaExceeded(files)).toBe(quotaExceeded)
+        }
+      )
+      it('blocks a folder upload whose files exceed the quota', () => {
+        const space = mock<SpaceResource>({
+          driveType: 'project',
+          id: '1',
+          spaceQuota: { remaining: 100 },
+          isOwner: () => true
+        })
+        const { instance } = getWrapper({ spaces: [space] })
+        const meta = { spaceId: '1', routeName: locationSpacesGeneric.name as string }
+        const folder = mock<OcUppyFile>({
+          name: 'folder',
+          type: 'directory',
+          meta: { ...meta, relativeFolder: 'folder' },
+          data: {} as Blob
+        })
+        const files = ['a', 'b', 'c'].map((name) =>
+          mock<OcUppyFile>({
+            name,
+            meta: { ...meta, relativeFolder: 'folder' },
+            data: { size: 40 } as Blob
+          })
+        )
+        expect(instance.checkQuotaExceeded([folder, ...files])).toBe(true)
+      })
+      it('still blocks the upload if one of the files has an unknown size', () => {
+        const space = mock<SpaceResource>({
+          driveType: 'project',
+          id: '1',
+          spaceQuota: { remaining: 100 },
+          isOwner: () => true
+        })
+        const { instance } = getWrapper({ spaces: [space] })
+        const meta = { spaceId: '1', routeName: locationSpacesGeneric.name as string }
+        const files = [undefined, 60, 60].map((size, i) =>
+          mock<OcUppyFile>({ name: `file${i}`, meta, data: { size } as Blob })
+        )
+        expect(instance.checkQuotaExceeded(files)).toBe(true)
+      })
+      it('does not check quota for share spaces', () => {
+        const size = 100
+        const remaining = 90
+        const space = mock<SpaceResource>({
+          driveType: 'share',
+          id: '1',
+          spaceQuota: { remaining }
+        })
+        const { instance } = getWrapper({ spaces: [space] })
+        const result = instance.checkQuotaExceeded([
+          mock<OcUppyFile>({
+            name: 'name',
+            meta: { spaceId: '1', routeName: locationSpacesGeneric.name as string },
+            data: { size } as Blob
+          })
+        ])
+        expect(result).toBeFalsy()
+      })
+      it("does not check quota for other's personal spaces", () => {
+        const size = 100
+        const remaining = 90
+        const space = mock<SpaceResource>({
+          driveType: 'personal',
+          id: '1',
+          spaceQuota: { remaining },
+          isOwner: () => false
+        })
+        const { instance } = getWrapper({ spaces: [space] })
+        const result = instance.checkQuotaExceeded([
+          mock<OcUppyFile>({
+            name: 'name',
+            meta: { spaceId: '1', routeName: locationSpacesGeneric.name as string },
+            data: { size } as Blob
+          })
+        ])
+        expect(result).toBeFalsy()
+      })
+    })
+    describe('quota check after conflict handling', () => {
+      function setup({
+        remaining,
+        resolvedFiles,
+        mergedFolders = [] as string[],
+        resources = [] as Resource[]
+      }: {
+        remaining: number
+        resolvedFiles: OcUppyFile[]
+        mergedFolders?: string[]
+        resources?: Resource[]
+      }) {
+        const space = mock<SpaceResource>({
+          driveType: 'project',
+          id: '1',
+          spaceQuota: { remaining },
+          isOwner: () => true,
+          getWebDavUrl: () => 'https://localhost/dav/spaces/1'
+        })
+        const { instance, mocks } = getWrapper({
+          spaces: [space],
+          conflicts: [mock<Resource>()],
+          conflictHandlerResult: resolvedFiles,
+          mergedFolders
+        })
+        unref(mocks.opts.route).name = locationSpacesGeneric.name
+        mocks.opts.space.value = space
+        mocks.opts.resourcesStore.currentFolder = mock<Resource>({ path: '/', storageId: '1' })
+        mocks.opts.resourcesStore.resources = resources
+        const showErrorMessageSpy = vi.spyOn(mocks.opts.messageStore, 'showErrorMessage')
+        return { instance, mocks, showErrorMessageSpy }
+      }
+      function uppyFile(name: string, size: number, relativePath?: string) {
+        return {
+          id: name,
+          name,
+          type: 'text/plain',
+          data: { size, lastModified: 0 } as File,
+          meta: { relativePath }
+        } as unknown as OcUppyFile
+      }
+
+      it('does not block files that are uploaded into a merged folder', async () => {
+        const files = [uppyFile('a', 60, '/folder/a'), uppyFile('b', 60, '/folder/b')]
+        const { instance, mocks, showErrorMessageSpy } = setup({
+          remaining: 100,
+          resolvedFiles: files,
+          mergedFolders: ['folder']
+        })
+        await instance.handleUpload(files)
+        expect(showErrorMessageSpy).not.toHaveBeenCalled()
+        expect(mocks.opts.uppyService.uploadFiles).toHaveBeenCalled()
+      })
+      it('blocks a folder that is kept as a copy and exceeds the quota', async () => {
+        const files = [uppyFile('a', 60, '/folder/a'), uppyFile('b', 60, '/folder/b')]
+        const { instance, mocks, showErrorMessageSpy } = setup({
+          remaining: 100,
+          resolvedFiles: files
+        })
+        await instance.handleUpload(files)
+        expect(displayOverwriteDialogMock).toHaveBeenCalled()
+        expect(showErrorMessageSpy).toHaveBeenCalled()
+        expect(mocks.uppy.removeFile).toHaveBeenCalledTimes(2)
+        expect(mocks.opts.uppyService.publish).not.toHaveBeenCalledWith('uploadStarted')
+        expect(mocks.opts.uppyService.uploadFiles).not.toHaveBeenCalled()
+      })
+      it('does not count a skipped file', async () => {
+        const skipped = uppyFile('big', 200)
+        const small = uppyFile('small', 10)
+        const { instance, mocks, showErrorMessageSpy } = setup({
+          remaining: 100,
+          resolvedFiles: [small]
+        })
+        await instance.handleUpload([skipped, small])
+        expect(showErrorMessageSpy).not.toHaveBeenCalled()
+        expect(mocks.opts.uppyService.uploadFiles).toHaveBeenCalled()
+      })
+      it('subtracts the size of a replaced file', async () => {
+        const replaced = uppyFile('file', 150)
+        const { instance, mocks, showErrorMessageSpy } = setup({
+          remaining: 100,
+          resolvedFiles: [replaced],
+          resources: [mock<Resource>({ name: 'file', size: 100 })]
+        })
+        await instance.handleUpload([replaced])
+        expect(showErrorMessageSpy).not.toHaveBeenCalled()
+        expect(mocks.opts.uppyService.uploadFiles).toHaveBeenCalled()
+      })
+    })
+    describe('conflict handling check', () => {
+      it('checks for conflicts if check enabled', async () => {
+        const { instance } = getWrapper()
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+        expect(getConflictsMock).toHaveBeenCalled()
+      })
+      it('does not check for conflicts if check disabled', async () => {
+        const { instance } = getWrapper({ conflictHandlingEnabled: false })
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+        expect(getConflictsMock).not.toHaveBeenCalled()
+      })
+      it('checks for conflicts before encrypting vault uploads', async () => {
+        // getConflicts compares file names against the cleartext resource
+        // store, so it has to run before applyVaultEncryption rewrites them to
+        // ciphertext. Otherwise every real collision is missed and the
+        // existing file is silently overwritten.
+        const { instance } = getWrapper()
+        vi.mocked(resolveVaultEngine).mockResolvedValueOnce(mock<VaultEngine>())
+        const encryptSpy = vi
+          .spyOn(instance as any, 'applyVaultEncryption')
+          .mockImplementation((...args: unknown[]) => Promise.resolve(args[0]))
+
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+
+        expect(getConflictsMock).toHaveBeenCalled()
+        expect(encryptSpy).toHaveBeenCalled()
+        expect(getConflictsMock.mock.invocationCallOrder[0]).toBeLessThan(
+          encryptSpy.mock.invocationCallOrder[0]
+        )
+      })
+      it('does not check for conflicts if uploads target a non-current folder', async () => {
+        // setUploadFolder was used to redirect uploads to a folder other than the
+        // user's current one. getConflicts can only check the current folder, so
+        // running it here would only produce false positives.
+        const { instance } = getWrapper({
+          uploadFolderForId: {
+            'upload-1': mock<Resource>({ path: '/elsewhere', storageId: 'space-1' })
+          }
+        })
+        // relativePath empty so prepareFiles' dirname() call short-circuits via
+        // the `!relativeFilePath` branch instead of crashing on a Mock value.
+        const file = mock<OcUppyFile>({
+          name: 'name',
+          meta: { uploadId: 'upload-1', relativePath: '' }
+        })
+        await instance.handleUpload([file])
+        expect(getConflictsMock).not.toHaveBeenCalled()
+      })
+      it('does not start upload if all files were skipped in conflict handling', async () => {
+        const { instance, mocks } = getWrapper({ conflicts: [{}], conflictHandlerResult: [] })
+        const removeFilesFromUploadSpy = vi.spyOn(instance, 'removeFilesFromUpload')
+
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+        expect(mocks.opts.uppyService.uploadFiles).not.toHaveBeenCalled()
+        expect(mocks.opts.uppyService.clearInputs).toHaveBeenCalled()
+        expect(removeFilesFromUploadSpy).toHaveBeenCalled()
+      })
+      it('removes skipped files from uppy and uploads the remaining ones', async () => {
+        const skippedFile = mock<OcUppyFile>({ id: 'skipped', name: 'one.txt' })
+        const freshFile = mock<OcUppyFile>({ id: 'fresh', name: 'fresh.txt' })
+        const { instance, mocks } = getWrapper({
+          conflicts: [{}],
+          conflictHandlerResult: [freshFile]
+        })
+        vi.spyOn(instance, 'prepareFiles').mockReturnValue([skippedFile, freshFile])
+
+        await instance.handleUpload([skippedFile, freshFile])
+        expect(mocks.uppy.removeFile).toHaveBeenCalledWith('skipped')
+        expect(mocks.uppy.removeFile).not.toHaveBeenCalledWith('fresh')
+        expect(mocks.opts.uppyService.uploadFiles).toHaveBeenCalled()
+      })
+      it('sets the result of the conflict handler as uppy file state', async () => {
+        const conflictHandlerResult = [mock<OcUppyFile>({ id: '1' })]
+        const { instance, mocks } = getWrapper({ conflicts: [{}], conflictHandlerResult })
+        await instance.handleUpload([mock<OcUppyFile>(), mock<OcUppyFile>()])
+
+        expect(mocks.uppy.setState).toHaveBeenCalledWith({
+          files: { [conflictHandlerResult[0].id]: conflictHandlerResult[0] }
+        })
+      })
+    })
+    describe('create directory tree', () => {
+      it('creates the directly tree if enabled', async () => {
+        const { instance } = getWrapper()
+        const createDirectoryTreeSpy = vi.spyOn(instance, 'createDirectoryTree')
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+        expect(createDirectoryTreeSpy).toHaveBeenCalled()
+      })
+      it('does not create the directly tree if disabled', async () => {
+        const { instance } = getWrapper({ directoryTreeCreateEnabled: false })
+        const createDirectoryTreeSpy = vi.spyOn(instance, 'createDirectoryTree')
+        await instance.handleUpload([mock<OcUppyFile>({ name: 'name' })])
+        expect(createDirectoryTreeSpy).not.toHaveBeenCalled()
+      })
+      it('removes directory dummy files from uppy queue when directory tree creation is disabled', async () => {
+        const { instance, mocks } = getWrapper({ directoryTreeCreateEnabled: false })
+        const removeFilesFromUploadSpy = vi.spyOn(instance, 'removeFilesFromUpload')
+        const directoryFile = mock<OcUppyFile>({ id: 'dir-1', name: 'emptyDir', type: 'directory' })
+        const regularFile = mock<OcUppyFile>({ id: 'file-1', name: 'file.txt' })
+        await instance.handleUpload([directoryFile, regularFile])
+        expect(removeFilesFromUploadSpy).toHaveBeenCalledWith([directoryFile])
+        expect(mocks.opts.uppyService.uploadFiles).toHaveBeenCalled()
+      })
+    })
+  })
+})
+
+const getWrapper = ({
+  conflictHandlingEnabled = true,
+  directoryTreeCreateEnabled = true,
+  quotaCheckEnabled = true,
+  conflicts = [],
+  conflictHandlerResult = [],
+  mergedFolders = [] as string[],
+  spaces = [],
+  uploadFolderForId = {} as Record<string, Resource>
+} = {}) => {
+  getConflictsMock = vi.fn(() => conflicts)
+  displayOverwriteDialogMock = vi
+    .fn()
+    .mockResolvedValue({ files: conflictHandlerResult, mergedFolders })
+
+  const route = mock<RouteLocationNormalizedLoaded>()
+  route.params.driveAliasAndItem = '1'
+  route.query.shareId = '1'
+
+  const uppy = mockDeep<Uppy<OcUppyMeta, OcUppyBody>>()
+  uppy.getState.mockReturnValue(mock<State<OcUppyMeta, OcUppyBody>>({ files: {} }))
+
+  createTestingPinia({
+    initialState: {
+      spaces: { spaces },
+      resources: { currentFolder: mock<Resource>({ path: '/' }), resources: [mock<Resource>()] }
+    }
+  })
+
+  const uppyService = mock<UppyService>({ uploadFolderMap: uploadFolderForId })
+
+  const opts = {
+    clientService: mockDeep<ClientService>(),
+    language: mock<Language>({ current: 'en' }),
+    route: computed(() => route),
+    userStore: useUserStore(),
+    messageStore: useMessages(),
+    spacesStore: useSpacesStore(),
+    resourcesStore: useResourcesStore(),
+    extensionRegistry: useExtensionRegistry(),
+    space: ref(mock<SpaceResource>()),
+    uppyService,
+    conflictHandlingEnabled,
+    directoryTreeCreateEnabled,
+    quotaCheckEnabled
+  }
+
+  const mocks = { uppy, opts }
+  const instance = new HandleUpload(uppy, opts)
+  return { instance, mocks }
+}

@@ -19,6 +19,13 @@ jobs:
           test -s docs/UPSTREAM-README.md
           test -s docs/GOREECLOUD-FORK.md
           test -s docs/GC-UI-FOUNDATIONS-THEME.md
+          test -s docs/WEB-CLIENT-UPSTREAM.md
+          test -s web-client/LICENSE
+          test -s web-client/package.json
+          test -s web-client/pnpm-lock.yaml
+          test -s services/web/assets/core/index.html
+          grep -q '954dbee3ac5b428d1f42c6eeaf9184484d1cda43' docs/WEB-CLIENT-UPSTREAM.md
+          grep -q 'GoreeCloud Drive' services/web/assets/core/index.html
           test -s services/web/assets/themes/goreecloud/theme.json
           test -s scripts/generate_gc_ui_theme.py
           python3 -m py_compile scripts/generate_gc_ui_theme.py

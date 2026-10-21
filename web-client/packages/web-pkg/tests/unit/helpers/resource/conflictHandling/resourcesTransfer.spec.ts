@@ -1,0 +1,218 @@
+import {
+  ResolveConflict,
+  ResolveStrategy,
+  ResourceTransfer,
+  TransferType,
+  resolveFileNameDuplicate
+} from '../../../../../src/helpers/resource/conflictHandling'
+import { mock, mockDeep, mockReset } from 'vitest-mock-extended'
+import { buildSpace, Resource, SpaceResource } from '@opencloud-eu/web-client'
+import { ListFilesResult } from '@opencloud-eu/web-client/webdav'
+import { Drive } from '@opencloud-eu/web-client/graph/generated'
+import { createTestingPinia } from '@opencloud-eu/web-test-helpers'
+import { ClientService } from '../../../../../src/services'
+import { computed } from 'vue'
+
+const clientServiceMock = mockDeep<ClientService>()
+let resourcesToMove: Resource[]
+let sourceSpace: SpaceResource
+let targetSpace: SpaceResource
+let targetFolder: Resource
+
+describe('resourcesTransfer', () => {
+  beforeEach(() => {
+    createTestingPinia()
+    mockReset(clientServiceMock)
+    resourcesToMove = [
+      {
+        id: 'a',
+        name: 'a',
+        path: '/a',
+        type: 'folder'
+      },
+      {
+        id: 'b',
+        name: 'b',
+        path: '/b'
+      }
+    ]
+    const spaceOptions = {
+      id: 'c42c9504-2c19-44fd-87cc-b4fc20ecbb54'
+    } as unknown as Drive
+    sourceSpace = buildSpace(spaceOptions)
+    targetSpace = buildSpace(spaceOptions)
+    targetFolder = {
+      id: 'target',
+      path: 'target',
+      webDavPath: '/target'
+    }
+  })
+  it.each([
+    { name: 'a', extension: '', expectName: 'a (1)' },
+    { name: 'a', extension: '', expectName: 'a (2)', existing: [{ name: 'a (1)' }] },
+    { name: 'a (1)', extension: '', expectName: 'a (1) (1)' },
+    { name: 'b.png', extension: 'png', expectName: 'b (1).png' },
+    { name: 'b.png', extension: 'png', expectName: 'b (2).png', existing: [{ name: 'b (1).png' }] },
+    { name: '.env', extension: 'env', expectName: '.env (1)' },
+    { name: '.env', extension: 'env', expectName: '.env (2)', existing: [{ name: '.env (1)' }] },
+    { name: '.config.json', extension: 'json', expectName: '.config (1).json' },
+    { name: 'b.md', extension: 'png', expectName: 'b.md (1)' }
+  ])('should name duplicate file correctly', (dataSet) => {
+    const existing = dataSet.existing ? [...resourcesToMove, ...dataSet.existing] : resourcesToMove
+    const result = resolveFileNameDuplicate(dataSet.name, dataSet.extension, existing as Resource[])
+    expect(result).toEqual(dataSet.expectName)
+  })
+
+  it('should prevent recursive paste', async () => {
+    const resourcesTransfer = new ResourceTransfer(
+      sourceSpace,
+      resourcesToMove,
+      targetSpace,
+      resourcesToMove[0],
+      computed(() => mock<Resource>()),
+      clientServiceMock,
+      vi.fn(),
+      vi.fn()
+    )
+    const result = await resourcesTransfer.getTransferData(TransferType.COPY)
+    expect(result.length).toBe(0)
+  })
+
+  it.each([
+    { targetPath: '/a/b', expected: true },
+    { targetPath: '/a/b/c', expected: true },
+    { targetPath: '/ab', expected: false }
+  ])('detects recursion for target "$targetPath"', ({ targetPath, expected }) => {
+    const resourcesTransfer = new ResourceTransfer(
+      sourceSpace,
+      [resourcesToMove[0]],
+      targetSpace,
+      mock<Resource>({ path: targetPath }),
+      computed(() => mock<Resource>()),
+      clientServiceMock,
+      vi.fn(),
+      vi.fn()
+    )
+    expect(resourcesTransfer.hasRecursion()).toBe(expected)
+  })
+
+  describe('copyMoveResource without conflicts', () => {
+    it.each([TransferType.COPY, TransferType.MOVE])(
+      'should copy / move files without renaming them if no conflicts exist',
+      async (action: TransferType) => {
+        const listFilesResult: ListFilesResult = {
+          resource: {} as Resource,
+          children: []
+        }
+        clientServiceMock.webdav.listFiles.mockReturnValueOnce(
+          new Promise((resolve) => resolve(listFilesResult))
+        )
+        const resourcesTransfer = new ResourceTransfer(
+          sourceSpace,
+          resourcesToMove,
+          targetSpace,
+          targetFolder,
+          computed(() => mock<Resource>()),
+          clientServiceMock,
+          vi.fn(),
+          vi.fn()
+        )
+        const transferData = await resourcesTransfer.getTransferData(action)
+
+        expect(transferData.length).toBe(resourcesToMove.length)
+
+        for (let i = 0; i < resourcesToMove.length; i++) {
+          const input = resourcesToMove[i]
+          const output = transferData[i]
+          expect(input.name).toBe(output.resource.name)
+        }
+      }
+    )
+  })
+  it('keeps both with names that are not taken by other items of the same batch', async () => {
+    const files = [
+      { id: '1', name: 'a.txt', extension: 'txt', path: '/a.txt' },
+      { id: '2', name: 'a (1).txt', extension: 'txt', path: '/a (1).txt' }
+    ] as Resource[]
+    clientServiceMock.webdav.listFiles.mockResolvedValueOnce({
+      resource: targetFolder,
+      children: [{ id: '3', name: 'a.txt', path: 'target/a.txt' } as Resource]
+    })
+    const resourcesTransfer = new ResourceTransfer(
+      sourceSpace,
+      files,
+      targetSpace,
+      targetFolder,
+      computed(() => mock<Resource>()),
+      clientServiceMock,
+      vi.fn(),
+      vi.fn()
+    )
+    resourcesTransfer.resolveAllConflicts = vi
+      .fn()
+      .mockResolvedValue([{ resource: files[0], strategy: ResolveStrategy.KEEP_BOTH }])
+
+    const transferData = await resourcesTransfer.getTransferData(TransferType.COPY)
+
+    expect(transferData.map(({ path }) => path)).toEqual(['target/a (2).txt', 'target/a (1).txt'])
+  })
+  it('should show message if conflict exists', async () => {
+    const targetFolderItems = [
+      {
+        id: 'a',
+        path: 'target/a',
+        webDavPath: '/target/a',
+        name: '/target/a'
+      }
+    ]
+    const resourcesTransfer = new ResourceTransfer(
+      sourceSpace,
+      resourcesToMove,
+      targetSpace,
+      resourcesToMove[0],
+      computed(() => mock<Resource>()),
+      clientServiceMock,
+      vi.fn(),
+      vi.fn()
+    )
+    resourcesTransfer.resolveFileExists = vi
+      .fn()
+      .mockImplementation(() => Promise.resolve({ strategy: 0 } as ResolveConflict))
+    await resourcesTransfer.resolveAllConflicts(resourcesToMove, targetFolder, targetFolderItems)
+
+    expect(resourcesTransfer.resolveFileExists).toHaveBeenCalled()
+  })
+  it('should show error message if trying to overwrite parent', () => {
+    const targetFolderItems = [
+      {
+        id: 'a',
+        path: 'target/a',
+        webDavPath: '/target/a',
+        name: '/target/a'
+      }
+    ]
+    const resourcesTransfer = new ResourceTransfer(
+      sourceSpace,
+      resourcesToMove,
+      targetSpace,
+      resourcesToMove[0],
+      computed(() => mock<Resource>({ path: '/' })),
+      clientServiceMock,
+      vi.fn(),
+      vi.fn()
+    )
+    const namingClash = resourcesTransfer.isOverwritingParentFolder(
+      resourcesToMove[0],
+      targetFolder,
+      targetFolderItems
+    )
+    const noNamingClash = resourcesTransfer.isOverwritingParentFolder(
+      resourcesToMove[1],
+      targetFolder,
+      targetFolderItems
+    )
+
+    expect(namingClash).toBeTruthy()
+    expect(noNamingClash).toBeFalsy()
+  })
+})

@@ -37,7 +37,7 @@ Assess each system against its current canonical contract: GoreeCloud Manager, P
 
 ## Engineering safeguards
 
-- Retain Apache-2.0 notices and audit all bundled third-party licenses. The distinct upstream web frontend is AGPL-3.0 and is not included in this source import.
+- Retain Apache-2.0 notices and audit all bundled third-party licenses. The separately maintained upstream AGPL-3.0 web frontend is pinned in `web-client/` and produces the embedded Files browser UI; preserve its distinct copyright, source-availability and redistribution requirements. See [web-client source and build](WEB-CLIENT-UPSTREAM.md).
 - Preserve accounts, file contents, metadata, version history, permissions and share links throughout migrations, and validate restoration and reversible changes.
 - Do not rename Go module paths, change storage formats or rewrite runtime architecture merely for cosmetic branding.
 - Test OIDC, WebDAV/Graph endpoints, sharing, revocation, quotas, upload interruptions, large-file handling, concurrent edits and conflict resolution.

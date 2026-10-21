@@ -12,8 +12,8 @@
 - **Upstream source:** [opencloud-eu/opencloud](https://github.com/opencloud-eu/opencloud); the precise imported revision and licensing are recorded in [docs/UPSTREAM.md](docs/UPSTREAM.md).
 - **Repository relationship:** Source was imported into an existing GoreeCloud repository. GitHub currently does **not** mark this repository as an upstream-linked GitHub fork; do not confuse source-code derivation with GitHub's `isFork` metadata.
 - **Current architecture:** Go server and services derived from OpenCloud; upstream module names and protocol behavior remain intact for compatibility.
-- **Web frontend:** The separate upstream [OpenCloud web client](https://github.com/opencloud-eu/web) is AGPL-3.0, and **has not been imported** into this server repository. Evaluate web-client licensing, architecture, and build independently.
-- **Maintenance and quality:** [docs/GOREECLOUD-FORK.md](docs/GOREECLOUD-FORK.md), [docs/UPSTREAM.md](docs/UPSTREAM.md), and the [preserved upstream README](docs/UPSTREAM-README.md).
+- **Web frontend:** The genuine [OpenCloud web client](https://github.com/opencloud-eu/web) is now imported as a pinned **AGPL-3.0** source snapshot under `web-client/`, with its compiled Files application embedded in the Go web service. Preserve the separate license, attribution and source-offer obligations; see [the frontend provenance and build guide](docs/WEB-CLIENT-UPSTREAM.md). This is a working frontend build, **not** proof of end-to-end service deployment or finished GoreeCloud UI design.
+- **Maintenance and quality:** [docs/GOREECLOUD-FORK.md](docs/GOREECLOUD-FORK.md), [docs/UPSTREAM.md](docs/UPSTREAM.md), [web-client provenance and build](docs/WEB-CLIENT-UPSTREAM.md), and the [preserved upstream README](docs/UPSTREAM-README.md).
 - **GoreeCloud UI developer preview:** An [opt-in GC UI Foundations theme](docs/GC-UI-FOUNDATIONS-THEME.md) supplies tested light/dark semantic colors through the existing web theme handler; the official Drive visual identity and full web-client UI adoption are not yet complete.
 
 ## Build the imported server
@@ -25,7 +25,7 @@ make generate
 make -C opencloud build
 ```
 
-The upstream development binary is `opencloud/bin/opencloud`; its inherited CLI naming is intentional until renaming is separately implemented and compatibility-tested. For **local isolated development only**, follow the [upstream development instructions](docs/UPSTREAM-README.md). Do not publicly expose default development configurations or use live credentials or data before security and deployment validation.
+The upstream development binary is `opencloud/bin/opencloud`; its inherited CLI naming is intentional until renaming is separately implemented and compatibility-tested. The pinned AGPL frontend can be rebuilt and re-embedded using `bash scripts/build_drive_web_client.sh` before building the Go binary; the checked-in build is already present for ordinary Go compiles. For **local isolated development only**, follow the [upstream development instructions](docs/UPSTREAM-README.md). Do not publicly expose default development configurations or use live credentials or data before security and deployment validation.
 
 ## GoreeCloud fork development
 
