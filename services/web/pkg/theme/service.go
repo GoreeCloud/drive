@@ -121,18 +121,24 @@ func (s Service) LogoUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// A logo is small by design. Bound multipart parsing before FormFile can
+	// spool attacker-controlled request bodies to disk.
+	r.Body = http.MaxBytesReader(w, r.Body, maxLogoRequestBytes)
 	file, fileHeader, err := r.FormFile("logo")
 	if err != nil {
-		if errors.Is(err, http.ErrMissingFile) {
-			w.WriteHeader(http.StatusBadRequest)
+		status := classifyLogoUploadError(err)
+		if status == http.StatusInternalServerError {
+			// Malformed multipart requests are client errors, not server faults.
+			status = http.StatusBadRequest
 		}
-		w.WriteHeader(http.StatusInternalServerError)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
 	defer file.Close()
 
-	if !isFiletypePermitted(fileHeader.Filename, fileHeader.Header.Get("Content-Type")) {
-		w.WriteHeader(http.StatusBadRequest)
+	if err := validateLogoUpload(file, fileHeader); err != nil {
+		status := classifyLogoUploadError(err)
+		http.Error(w, http.StatusText(status), status)
 		return
 	}
 
