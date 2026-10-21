@@ -1,35 +1,37 @@
 # GoreeCloud Drive
 
-**GoreeCloud Drive** is GoreeCloud's self-hosted file storage, synchronization, sharing, and collaboration platform. This repository follows the **Fork-to-Native** development path, initially importing the Apache-2.0-licensed [OpenCloud server](https://github.com/opencloud-eu/opencloud) while progressively establishing GoreeCloud-owned product and architecture boundaries.
+**GoreeCloud Drive** is GoreeCloud's self-hosted file storage, synchronization, sharing, and collaboration platform. This project is an owner-designated **GoreeCloud Fork** of the Apache-2.0-licensed [OpenCloud server](https://github.com/opencloud-eu/opencloud).
 
-> **Development status — foundation import.** This source import is not a Stable release, deployment, completed Glaze integration, or completed native conversion. Review security settings before using any real data.
+> **Development status — foundation import.** The OpenCloud-derived backend has been imported and compiled in development, but this is not a Stable release, deployed service, completed Glaze experience, or verified production configuration. Review security settings before using real data.
 
 ## Source and architecture
 
 - **Product:** GoreeCloud Drive.
 - **Canonical repository:** [GoreeCloud/drive](https://github.com/GoreeCloud/drive).
-- **Upstream foundation:** [opencloud-eu/opencloud](https://github.com/opencloud-eu/opencloud).
-- **Current architecture:** inherited Go backend and services; upstream module paths are intentionally retained during initial import for compatibility.
-- **Web frontend:** the OpenCloud Vue/TypeScript web project is maintained [separately](https://github.com/opencloud-eu/web) and is under AGPL-3.0; the server's own LICENSE is Apache-2.0. Review component-specific licensing before modifying or distributing bundled components.
-- **Provenance and development gates:** [docs/UPSTREAM.md](docs/UPSTREAM.md), [docs/FORK-TO-NATIVE.md](docs/FORK-TO-NATIVE.md), and [docs/UPSTREAM-README.md](docs/UPSTREAM-README.md).
+- **Development approach:** Independently maintained **GoreeCloud Fork**. Continue improving the OpenCloud foundation, reviewing upstream fixes and releases, and developing GoreeCloud-specific features. **There is no mandatory native rewrite.**
+- **Upstream source:** [opencloud-eu/opencloud](https://github.com/opencloud-eu/opencloud); the precise imported revision and licensing are recorded in [docs/UPSTREAM.md](docs/UPSTREAM.md).
+- **Repository relationship:** Source was imported into an existing GoreeCloud repository. GitHub currently does **not** mark this repository as an upstream-linked GitHub fork; do not confuse source-code derivation with GitHub's `isFork` metadata.
+- **Current architecture:** Go server and services derived from OpenCloud; upstream module names and protocol behavior remain intact for compatibility.
+- **Web frontend:** The separate upstream [OpenCloud web client](https://github.com/opencloud-eu/web) is AGPL-3.0, and **has not been imported** into this server repository. Evaluate web-client licensing, architecture, and build independently.
+- **Maintenance and quality:** [docs/GOREECLOUD-FORK.md](docs/GOREECLOUD-FORK.md), [docs/UPSTREAM.md](docs/UPSTREAM.md), and the [preserved upstream README](docs/UPSTREAM-README.md).
 
-## Build the inherited server
+## Build the imported server
 
-The initial import preserves upstream build mechanics. From the repository root, with the Go toolchain and generation dependencies installed:
+The initial import preserves upstream build mechanics. With the Go toolchain and generation dependencies installed:
 
 ```bash
 make generate
 make -C opencloud build
 ```
 
-The expected development binary is `opencloud/bin/opencloud`. For a **local, isolated test installation only**, follow the [upstream development instructions](docs/UPSTREAM-README.md) to initialize and run the service. The initial upstream configuration may not meet production security requirements; do not expose it to the public internet or use live credentials/data before hardening and verification.
+The upstream development binary is `opencloud/bin/opencloud`; its inherited CLI naming is intentional until renaming is separately implemented and compatibility-tested. For **local isolated development only**, follow the [upstream development instructions](docs/UPSTREAM-README.md). Do not publicly expose default development configurations or use live credentials or data before security and deployment validation.
 
-## GoreeCloud direction
+## GoreeCloud fork development
 
-The program's next milestones are (1) reproducible backend builds and security baseline, (2) preservation inventory and test coverage, (3) approved GoreeCloud identity and Glaze interface without feature regression, (4) GoreeCloud-owned integrations and API boundaries, and (5) incremental, tested replacement of strategic inherited components. These are planned milestones, **not shipped claims**.
+Preserve and improve OpenCloud's existing capabilities; apply the approved GoreeCloud visual identity and Glaze UI where implemented; strengthen security, reliability, privacy, and accessibility; integrate approved GoreeCloud platform capabilities; and maintain a reviewable path for upstream security updates and fixes. Upstream code is a foundation to maintain, not a temporary architecture that must be rewritten.
 
-Source changes must preserve upstream attribution, important user capabilities, data continuity, accessibility, and rollback paths. Avoid rewriting Go module paths or storage formats as a branding shortcut.
+All changes must preserve upstream attribution, relevant third-party licenses, user data, sharing behavior, API/client compatibility, and rollback paths. **Do not claim features, integrations, tests, or deployments without evidence.**
 
-## License and upstream acknowledgements
+## Licensing and acknowledgement
 
-The imported server is based on OpenCloud and retains the upstream [Apache License 2.0](LICENSE), original source copyright notices, and licenses for included third-party dependencies. GoreeCloud Drive is an independent derivative development project, not an official OpenCloud release or an assertion of upstream endorsement.
+The imported server is based on OpenCloud and retains its upstream [Apache License 2.0](LICENSE), original copyright notices, and licenses for bundled third-party dependencies. GoreeCloud Drive is an independent derivative project, not an official OpenCloud release and not endorsed by OpenCloud.
