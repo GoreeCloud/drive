@@ -47,7 +47,11 @@ func (f *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer asset.Close()
 
-	s, _ := asset.Stat()
+	s, err := asset.Stat()
+	if err != nil {
+		http.Error(w, "could not inspect requested asset", http.StatusInternalServerError)
+		return
+	}
 	if s.IsDir() {
 		tryIndex()
 		return
@@ -55,22 +59,28 @@ func (f *fileServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", mime.TypeByExtension(filepath.Ext(s.Name())))
 
-	buf := new(bytes.Buffer)
-
 	switch s.Name() {
 	case "index.html", "oidc-callback.html", "oidc-silent-redirect.html":
 		w.Header().Del("Expires")
 		w.Header().Set("Cache-Control", "no-cache")
-		_ = withBase(buf, asset, "/")
+		buf := new(bytes.Buffer)
+		if err := withBase(buf, asset, "/"); err != nil {
+			http.Error(w, "could not process HTML asset", http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write(buf.Bytes())
 	default:
-		_, _ = buf.ReadFrom(asset)
+		// Static assets can be large. Stream without first copying their entire
+		// contents into a process-local buffer.
+		_, _ = io.Copy(w, asset)
 	}
-
-	_, _ = w.Write(buf.Bytes())
 }
 
 func withBase(w io.Writer, r io.Reader, base string) error {
-	doc, _ := html.Parse(r)
+	doc, err := html.Parse(r)
+	if err != nil {
+		return err
+	}
 	var parse func(*html.Node)
 	parse = func(n *html.Node) {
 		if n.Type == html.ElementNode && n.Data == "head" {
