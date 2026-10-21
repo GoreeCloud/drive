@@ -33,5 +33,7 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
-      - name: Go web-theme unit tests
-        run: go test -mod=vendor ./services/web/pkg/theme
+      - name: Go web asset and theme security regression tests
+        run: go test -mod=vendor ./services/web/pkg/assets ./services/web/pkg/theme
+      - name: Vet web asset and theme packages
+        run: go vet -mod=vendor ./services/web/pkg/assets ./services/web/pkg/theme

@@ -97,13 +97,18 @@ func (s Service) Get(w http.ResponseWriter, r *http.Request) {
 
 // LogoUpload implements the endpoint to upload a custom logo for the OpenCloud instance.
 func (s Service) LogoUpload(w http.ResponseWriter, r *http.Request) {
+	user, ok := revactx.ContextGetUser(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	gatewayClient, err := s.gatewaySelector.Next()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	user := revactx.ContextMustGetUser(r.Context())
 	rsp, err := gatewayClient.CheckPermission(r.Context(), &permissionsapi.CheckPermissionRequest{
 		Permission: "Logo.Write",
 		SubjectRef: &permissionsapi.SubjectReference{
@@ -164,13 +169,18 @@ func (s Service) LogoUpload(w http.ResponseWriter, r *http.Request) {
 // LogoReset implements the endpoint to reset the instance logo.
 // The config will be changed back to use the embedded logo asset.
 func (s Service) LogoReset(w http.ResponseWriter, r *http.Request) {
+	user, ok := revactx.ContextGetUser(r.Context())
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	gatewayClient, err := s.gatewaySelector.Next()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	user := revactx.ContextMustGetUser(r.Context())
 	rsp, err := gatewayClient.CheckPermission(r.Context(), &permissionsapi.CheckPermissionRequest{
 		Permission: "Logo.Write",
 		SubjectRef: &permissionsapi.SubjectReference{
