@@ -18,10 +18,16 @@ workspace packages, configurations, tests, legal attributions and
 `LICENSE` remains Apache-2.0; **it does not relicence the browser frontend**.
 The compiled client under `services/web/assets/core` is generated from the
 AGPL-covered source and must be distributed and deployed in compliance with
-its network-source and third-party notice obligations. Before any production
-release, provide a prominent corresponding-source link to end users and
-review third-party source/license and distribution obligations. This document
-is not a legal compliance certification.
+its network-source and third-party notice obligations. The browser client now
+includes an unconditional **Source code (AGPL-3.0)** link in the account-menu
+footer (including guest contexts) pointing to the publicly readable
+[GoreeCloud Drive web-client source](https://github.com/GoreeCloud/drive/tree/main/web-client).
+It opens in a new tab with `rel="noopener noreferrer"`, and the Go embedded
+asset tests verify that the compiled frontend actually contains the source URL.
+Continue to review network availability, complete corresponding-source
+coverage, third-party notices, license details and release-specific distribution
+obligations before deployment. **A link by itself is not a legal compliance
+certification.**
 
 A dedicated [read-only upstream web-client watch](WEB-CLIENT-WATCH.json) detects
 browser-source, latest-release, and public advisory changes independently of

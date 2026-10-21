@@ -127,18 +127,32 @@
           </li>
         </template>
       </oc-list>
-      <div v-if="showFooter" class="imprint-footer py-2 mt-4 text-center bg-role-surface-container">
+      <div class="imprint-footer py-2 mt-4 text-center bg-role-surface-container">
         <oc-button
-          v-if="imprintUrl"
           type="a"
           appearance="raw-inverse"
           color-role="surface"
-          :href="imprintUrl"
+          :href="sourceCodeUrl"
           target="_blank"
+          rel="noopener noreferrer"
           no-hover
         >
-          <span v-text="$gettext('Imprint')" />
+          <span v-text="$gettext('Source code (AGPL-3.0)')" />
         </oc-button>
+        <template v-if="imprintUrl">
+          <span>·</span>
+          <oc-button
+            type="a"
+            appearance="raw-inverse"
+            color-role="surface"
+            :href="imprintUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            no-hover
+          >
+            <span v-text="$gettext('Imprint')" />
+          </oc-button>
+        </template>
         <template v-if="privacyUrl">
           <span>·</span>
           <oc-button
@@ -147,6 +161,7 @@
             color-role="surface"
             :href="privacyUrl"
             target="_blank"
+            rel="noopener noreferrer"
             no-hover
           >
             <span v-text="$gettext('Privacy')" />
@@ -160,6 +175,7 @@
             color-role="surface"
             :href="accessibilityUrl"
             target="_blank"
+            rel="noopener noreferrer"
             no-hover
           >
             <span v-text="$gettext('Accessibility')" />
@@ -231,9 +247,9 @@ const imprintUrl = computed(() => themeStore.currentTheme.urls.imprint)
 const privacyUrl = computed(() => themeStore.currentTheme.urls.privacy)
 const accessibilityUrl = computed(() => themeStore.currentTheme.urls.accessibility)
 
-const showFooter = computed(() => {
-  return !!(unref(imprintUrl) || unref(privacyUrl) || unref(accessibilityUrl))
-})
+// The browser frontend is AGPL-3.0. Keep its corresponding source reachable
+// without authentication in the first-party GoreeCloud Drive repository.
+const sourceCodeUrl = 'https://github.com/GoreeCloud/drive/tree/main/web-client'
 
 const quota = computed(() => {
   return spacesStore.personalSpace?.spaceQuota
