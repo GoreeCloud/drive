@@ -1,0 +1,22 @@
+name: GoreeCloud Drive foundation
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  source-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify required provenance and licensing
+        run: |
+          test -s LICENSE
+          test -s go.mod
+          test -s docs/UPSTREAM.md
+          test -s docs/UPSTREAM-README.md
+          grep -q '^module github.com/opencloud-eu/opencloud$' go.mod
+          grep -q '61ae13a1fea0bb8a36bf4b96c1d222fc84aeaa9c' docs/UPSTREAM.md
+          git diff --check

@@ -1,0 +1,33 @@
+---
+exclude_paths:
+  - '.github/**'
+  - '.agents/**'
+  - 'CHANGELOG.md'
+  - '**/CHANGELOG.md'
+  - 'changelog/**'
+  - '**/changelog/**'
+  - 'docs/**'
+  - '**/docs/**'
+  - '**/pkg/proto/**'
+  - 'protogen/**'
+  - 'scripts/**'
+  - 'idp/ui_config/**'
+  - 'idp/scripts/**'
+  - 'idp/src/**'
+  - 'devtools/**'
+  - 'deployments/**'
+  - "release-config.ts"
+  - 'tests/acceptance/expected-failures-*.md'
+  # written by the search engine parity suite, table rows are as wide as they are
+  - 'services/search/pkg/parity/README.md'
+  - 'tests/acceptance/bootstrap/**'
+  - 'tests/acceptance/TestHelpers/**'
+  - 'tests/acceptance/scripts/run.sh'
+  - 'vendor/**/*'
+  - 'vendor-bin/**'
+  - 'tests/ocwrapper/vendor/**'
+  - '**/mocks/**'
+  - '**/pkg/config/**'
+  - '**/pkg/metrics/**'
+  - '**/pkg/revaconfig/**'
+...

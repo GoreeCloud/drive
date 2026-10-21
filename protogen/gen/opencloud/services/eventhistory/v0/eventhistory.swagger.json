@@ -1,0 +1,95 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "OpenCloud eventhistory",
+    "version": "1.0.0",
+    "contact": {
+      "name": "OpenCloud GmbH",
+      "url": "https://github.com/opencloud-eu/opencloud",
+      "email": "support@opencloud.eu"
+    },
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://github.com/opencloud-eu/opencloud/blob/main/LICENSE"
+    }
+  },
+  "tags": [
+    {
+      "name": "EventHistoryService"
+    }
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {},
+  "definitions": {
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "rpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "v0Event": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "REQUIRED."
+        },
+        "id": {
+          "type": "string",
+          "description": "REQUIRED."
+        },
+        "event": {
+          "type": "string",
+          "format": "byte",
+          "title": "REQUIRED"
+        }
+      }
+    },
+    "v0GetEventsResponse": {
+      "type": "object",
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v0Event"
+          }
+        }
+      },
+      "title": "The service response"
+    }
+  },
+  "externalDocs": {
+    "description": "Developer Manual",
+    "url": "https://docs.opencloud.eu/services/eventhistory/"
+  }
+}

@@ -1,0 +1,167 @@
+package command
+
+import (
+	"context"
+	"fmt"
+	"os/signal"
+	"reflect"
+
+	"github.com/opencloud-eu/reva/v2/pkg/events"
+	"github.com/opencloud-eu/reva/v2/pkg/events/stream"
+	"github.com/opencloud-eu/reva/v2/pkg/rgrpc/todo/pool"
+
+	"github.com/opencloud-eu/opencloud/pkg/config/configlog"
+	ocEvents "github.com/opencloud-eu/opencloud/pkg/events"
+	"github.com/opencloud-eu/opencloud/pkg/generators"
+	"github.com/opencloud-eu/opencloud/pkg/log"
+	"github.com/opencloud-eu/opencloud/pkg/registry"
+	"github.com/opencloud-eu/opencloud/pkg/runner"
+	"github.com/opencloud-eu/opencloud/pkg/service/grpc"
+	"github.com/opencloud-eu/opencloud/pkg/tracing"
+	settingssvc "github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/settings/v0"
+	"github.com/opencloud-eu/opencloud/services/notifications/pkg/channels"
+	"github.com/opencloud-eu/opencloud/services/notifications/pkg/config"
+	"github.com/opencloud-eu/opencloud/services/notifications/pkg/config/parser"
+	"github.com/opencloud-eu/opencloud/services/notifications/pkg/server/debug"
+	"github.com/opencloud-eu/opencloud/services/notifications/pkg/service"
+
+	"github.com/opencloud-eu/reva/v2/pkg/store"
+	"github.com/spf13/cobra"
+	microstore "go-micro.dev/v4/store"
+
+	ehsvc "github.com/opencloud-eu/opencloud/protogen/gen/opencloud/services/eventhistory/v0"
+)
+
+// Server is the entrypoint for the server command.
+func Server(cfg *config.Config) *cobra.Command {
+	return &cobra.Command{
+		Use:   "server",
+		Short: fmt.Sprintf("start the %s service without runtime (unsupervised mode)", cfg.Service.Name),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			return configlog.ReturnFatal(parser.ParseConfig(cfg))
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger := log.Configure(cfg.Service.Name, cfg.Commons, cfg.LogLevel)
+
+			traceProvider, err := tracing.GetTraceProvider(cmd.Context(), cfg.Commons.TracesExporter, cfg.Service.Name)
+			if err != nil {
+				return err
+			}
+
+			grpcClient, err := grpc.NewClient(
+				append(
+					grpc.GetClientOptions(&cfg.GRPCClientTLS),
+					grpc.WithTraceProvider(traceProvider),
+				)...,
+			)
+			if err != nil {
+				return err
+			}
+
+			var cancel context.CancelFunc
+			if cfg.Context == nil {
+				cfg.Context, cancel = signal.NotifyContext(context.Background(), runner.StopSignals...)
+				defer cancel()
+			}
+			ctx := cfg.Context
+
+			gr := runner.NewGroup()
+			{
+				debugServer, err := debug.Server(
+					debug.Logger(logger),
+					debug.Context(ctx),
+					debug.Config(cfg),
+				)
+				if err != nil {
+					logger.Info().Err(err).Str("transport", "debug").Msg("Failed to initialize server")
+					return err
+				}
+
+				gr.Add(runner.NewGolangHttpServerRunner(cfg.Service.Name+".debug", debugServer))
+			}
+
+			// evs defines a list of events to subscribe to
+			evs := []events.Unmarshaller{
+				events.ShareCreated{},
+				events.ShareExpired{},
+				events.ShareRemoved{},
+				events.SpaceShared{},
+				events.SpaceUnshared{},
+				events.SpaceMembershipExpired{},
+				events.ScienceMeshInviteTokenGenerated{},
+				events.SendEmailsEvent{},
+				ocEvents.ResourceMention{},
+				ocEvents.GuestTokenCreated{},
+				ocEvents.GuestTokenRenewed{},
+			}
+			registeredEvents := make(map[string]events.Unmarshaller)
+			for _, e := range evs {
+				typ := reflect.TypeOf(e)
+				registeredEvents[typ.String()] = e
+			}
+
+			connName := generators.GenerateConnectionName(cfg.Service.Name, generators.NTypeBus)
+			client, err := stream.NatsFromConfig(connName, false, stream.NatsConfig(cfg.Notifications.Events))
+			if err != nil {
+				return err
+			}
+			evts, err := events.Consume(client, "notifications", evs...)
+			if err != nil {
+				return err
+			}
+			channel, err := channels.NewMailChannel(*cfg, logger)
+			if err != nil {
+				return err
+			}
+			tm, err := pool.StringToTLSMode(cfg.Notifications.GRPCClientTLS.Mode)
+			if err != nil {
+				return err
+			}
+			gatewaySelector, err := pool.GatewaySelector(
+				cfg.Notifications.RevaGateway,
+				pool.WithTLSCACert(cfg.Notifications.GRPCClientTLS.CACert),
+				pool.WithTLSMode(tm),
+				pool.WithRegistry(registry.GetRegistry()),
+				pool.WithTracerProvider(traceProvider),
+			)
+			if err != nil {
+				logger.Fatal().Err(err).Str("addr", cfg.Notifications.RevaGateway).Msg("could not get reva gateway selector")
+			}
+			valueService := settingssvc.NewValueService("eu.opencloud.api.settings", grpcClient)
+			historyClient := ehsvc.NewEventHistoryService("eu.opencloud.api.eventhistory", grpcClient)
+
+			notificationStore := store.Create(
+				store.Store(cfg.Store.Store),
+				store.TTL(cfg.Store.TTL),
+				microstore.Nodes(cfg.Store.Nodes...),
+				microstore.Database(cfg.Store.Database),
+				microstore.Table(cfg.Store.Table),
+				store.Authentication(cfg.Store.AuthUsername, cfg.Store.AuthPassword),
+				store.TLSEnabled(cfg.Store.EnableTLS),
+				store.TLSInsecure(cfg.Store.TLSInsecure),
+				store.TLSRootCA(cfg.Store.TLSRootCACertificate),
+			)
+
+			svc := service.NewEventsNotifier(evts, channel, logger, gatewaySelector, valueService,
+				cfg.ServiceAccount.ServiceAccountID, cfg.ServiceAccount.ServiceAccountSecret,
+				cfg.Notifications.EmailTemplatePath, cfg.Notifications.DefaultLanguage, cfg.WebUIURL,
+				cfg.Notifications.TranslationPath, cfg.Notifications.SMTP.Sender, notificationStore, historyClient, registeredEvents)
+
+			gr.Add(runner.New(cfg.Service.Name+".svc", func() error {
+				return svc.Run()
+			}, func() {
+				svc.Close()
+			}))
+
+			grResults := gr.Run(ctx)
+
+			// return the first non-nil error found in the results
+			for _, grResult := range grResults {
+				if grResult.RunnerError != nil {
+					return grResult.RunnerError
+				}
+			}
+			return nil
+		},
+	}
+}

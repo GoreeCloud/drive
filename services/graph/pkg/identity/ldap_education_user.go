@@ -1,0 +1,424 @@
+package identity
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"github.com/go-ldap/ldap/v3"
+	libregraph "github.com/opencloud-eu/libre-graph-api-go"
+	"github.com/opencloud-eu/opencloud/services/graph/pkg/errorcode"
+)
+
+type educationUserAttributeMap struct {
+	primaryRole string
+	externalID  string
+}
+
+func newEducationUserAttributeMap() educationUserAttributeMap {
+	return educationUserAttributeMap{
+		primaryRole: "userClass",
+		externalID:  "openCloudEducationExternalId",
+	}
+}
+
+// CreateEducationUser creates a given education user in the identity backend.
+func (i *LDAP) CreateEducationUser(ctx context.Context, user libregraph.EducationUser) (*libregraph.EducationUser, error) {
+	logger := i.logger.SubloggerWithRequestID(ctx)
+	logger.Debug().Msg("CreateEducationUser")
+	if !i.writeEnabled {
+		return nil, ErrReadOnly
+	}
+
+	ar, err := i.educationUserToAddRequest(user)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = i.conn.Add(ar); err != nil {
+		var lerr *ldap.Error
+		logger.Debug().Err(err).Msg("error adding user")
+		if errors.As(err, &lerr) {
+			if lerr.ResultCode == ldap.LDAPResultEntryAlreadyExists {
+				err = errorcode.New(errorcode.NameAlreadyExists, lerr.Error())
+			}
+		}
+		return nil, err
+	}
+
+	// Read	back user from LDAP to get the generated UUID
+	e, err := i.getEducationUserByDN(ar.DN)
+	if err != nil {
+		return nil, err
+	}
+	return i.createEducationUserModelFromLDAP(e)
+}
+
+// DeleteEducationUser deletes a given education user, identified by username or id, from the backend
+func (i *LDAP) DeleteEducationUser(ctx context.Context, nameOrID string) error {
+	logger := i.logger.SubloggerWithRequestID(ctx)
+	logger.Debug().Msg("DeleteEducationUser")
+	if !i.writeEnabled {
+		return ErrReadOnly
+	}
+	// TODO, implement a proper lookup for education Users here
+	e, err := i.getEducationUserByNameOrID(nameOrID)
+	if err != nil {
+		return err
+	}
+
+	dr := ldap.DelRequest{DN: e.DN}
+	if err = i.conn.Del(&dr); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UpdateEducationUser applies changes to given education user, identified by username or id
+func (i *LDAP) UpdateEducationUser(ctx context.Context, nameOrID string, user libregraph.EducationUser) (*libregraph.EducationUser, error) {
+	logger := i.logger.SubloggerWithRequestID(ctx)
+	logger.Debug().Msg("UpdateEducationUser")
+	if !i.writeEnabled {
+		return nil, ErrReadOnly
+	}
+	e, err := i.getEducationUserByNameOrID(nameOrID)
+	if err != nil {
+		return nil, err
+	}
+
+	var updateNeeded bool
+
+	// Don't allow updates of the ID
+	if user.GetId() != "" {
+		id, err := i.ldapUUIDtoString(e, i.userAttributeMap.id, i.userIDisOctetString)
+		if err != nil {
+			i.logger.Warn().Str("dn", e.DN).Str(i.userAttributeMap.id, e.GetEqualFoldAttributeValue(i.userAttributeMap.id)).Msg("Invalid User. Cannot convert UUID")
+			return nil, errorcode.New(errorcode.GeneralException, "error converting uuid")
+		}
+		if id != user.GetId() {
+			return nil, errorcode.New(errorcode.NotAllowed, "changing the UserId is not allowed")
+		}
+	}
+	if user.GetOnPremisesSamAccountName() != "" {
+		if eu := e.GetEqualFoldAttributeValue(i.userAttributeMap.userName); eu != user.GetOnPremisesSamAccountName() {
+			e, err = i.changeUserName(ctx, e.DN, eu, user.GetOnPremisesSamAccountName())
+			if err != nil {
+				return nil, err
+			}
+			e, err = i.getEducationUserByDN(e.DN)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	mr := ldap.ModifyRequest{DN: e.DN}
+	properties := map[string]string{
+		i.userAttributeMap.displayName:                 user.GetDisplayName(),
+		i.userAttributeMap.mail:                        user.GetMail(),
+		i.userAttributeMap.surname:                     user.GetSurname(),
+		i.userAttributeMap.givenName:                   user.GetGivenName(),
+		i.userAttributeMap.userType:                    user.GetUserType(),
+		i.educationConfig.userAttributeMap.primaryRole: user.GetPrimaryRole(),
+		i.educationConfig.userAttributeMap.externalID:  user.GetExternalId(),
+	}
+
+	for attribute, value := range properties {
+		if value != "" {
+			if e.GetEqualFoldAttributeValue(attribute) != value {
+				mr.Replace(attribute, []string{value})
+				updateNeeded = true
+			}
+		}
+	}
+
+	if user.AccountEnabled != nil {
+		un, err := i.updateAccountEnabledState(logger, user.GetAccountEnabled(), e, &mr)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if un {
+			updateNeeded = true
+		}
+	}
+	if user.PasswordProfile != nil && user.PasswordProfile.GetPassword() != "" {
+		if i.usePwModifyExOp {
+			if err := i.updateUserPassword(ctx, e.DN, user.PasswordProfile.GetPassword()); err != nil {
+				return nil, err
+			}
+		} else {
+			// password are hashed server side there is no need to check if the new password
+			// is actually different from the old one.
+			mr.Replace("userPassword", []string{user.PasswordProfile.GetPassword()})
+			updateNeeded = true
+		}
+	}
+	if identities, ok := user.GetIdentitiesOk(); ok {
+		attrValues := make([]string, 0, len(identities))
+		for _, identity := range identities {
+			identityStr, err := i.identityToLDAPAttrValue(identity)
+			if err != nil {
+				return nil, err
+			}
+			attrValues = append(attrValues, identityStr)
+		}
+		mr.Replace(i.userAttributeMap.identities, attrValues)
+		updateNeeded = true
+	}
+
+	if updateNeeded {
+		if err := i.conn.Modify(&mr); err != nil {
+			return nil, err
+		}
+	}
+
+	// Read	back user from LDAP to get the generated UUID
+	e, err = i.getEducationUserByDN(e.DN)
+	if err != nil {
+		return nil, err
+	}
+
+	returnUser, err := i.createEducationUserModelFromLDAP(e)
+	if err != nil {
+		return nil, err
+	}
+
+	// To avoid a ldap lookup for group membership, set the enabled flag to same as input value
+	// since this would have been updated with group membership from the input anyway.
+	if user.AccountEnabled != nil && i.disableUserMechanism == DisableMechanismGroup {
+		returnUser.AccountEnabled = user.AccountEnabled
+	}
+
+	return returnUser, nil
+}
+
+// GetEducationUser implements the EducationBackend interface for the LDAP backend.
+func (i *LDAP) GetEducationUser(ctx context.Context, nameOrID string) (*libregraph.EducationUser, error) {
+	logger := i.logger.SubloggerWithRequestID(ctx)
+	logger.Debug().Msg("GetEducationUser")
+	e, err := i.getEducationUserByNameOrID(nameOrID)
+	if err != nil {
+		return nil, err
+	}
+	u, err := i.createEducationUserModelFromLDAP(e)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// GetEducationUsers implements the EducationBackend interface for the LDAP backend.
+func (i *LDAP) GetEducationUsers(ctx context.Context) ([]*libregraph.EducationUser, error) {
+	var filter string
+	if i.userFilter == "" {
+		filter = fmt.Sprintf("(objectClass=%s)", i.educationConfig.userObjectClass)
+	} else {
+		filter = fmt.Sprintf("(&%s(objectClass=%s))", i.userFilter, i.educationConfig.userObjectClass)
+	}
+	return i.searchEducationUsers(ctx, filter)
+}
+
+func (i *LDAP) FilterEducationUsersByAttribute(ctx context.Context, attr, value string) ([]*libregraph.EducationUser, error) {
+	logger := i.logger.SubloggerWithRequestID(ctx).With().Str("func", "FilterEducationUsersByAttribute").Logger()
+	logger.Debug().Str("attribute", attr).Str("value", value).Msg("")
+
+	var ldapAttr string
+	switch attr {
+	case "displayname":
+		ldapAttr = i.userAttributeMap.displayName
+	case "mail":
+		ldapAttr = i.userAttributeMap.mail
+	case "userType":
+		ldapAttr = i.userAttributeMap.userType
+	case "primaryRole":
+		ldapAttr = i.educationConfig.userAttributeMap.primaryRole
+	case "externalId":
+		ldapAttr = i.educationConfig.userAttributeMap.externalID
+	default:
+		return nil, errorcode.New(errorcode.InvalidRequest, fmt.Sprintf("filtering by attribute '%s' is not supported", attr))
+	}
+	filter := fmt.Sprintf("(&%s(objectClass=%s)(%s=%s))", i.userFilter, i.educationConfig.userObjectClass, ldap.EscapeFilter(ldapAttr), ldap.EscapeFilter(value))
+	return i.searchEducationUsers(ctx, filter)
+}
+
+// searchEducationUsers builds and executes an LDAP search for education users and converts the results to EducationUser models.
+func (i *LDAP) searchEducationUsers(ctx context.Context, filter string) ([]*libregraph.EducationUser, error) {
+	searchRequest := ldap.NewSearchRequest(
+		i.userBaseDN,
+		i.userScope,
+		ldap.NeverDerefAliases, 0, 0, false,
+		filter,
+		i.getEducationUserAttrTypes(),
+		nil,
+	)
+	logger := i.logger.SubloggerWithRequestID(ctx)
+	logger.Debug().
+		Str("base", searchRequest.BaseDN).
+		Str("filter", searchRequest.Filter).
+		Int("scope", searchRequest.Scope).
+		Int("sizelimit", searchRequest.SizeLimit).
+		Interface("attributes", searchRequest.Attributes).
+		Msg("searchEducationUsers")
+
+	res, err := i.conn.Search(searchRequest)
+	if err != nil {
+		return nil, errorcode.New(errorcode.ItemNotFound, err.Error())
+	}
+
+	users := make([]*libregraph.EducationUser, 0, len(res.Entries))
+	for _, e := range res.Entries {
+		if u, err := i.createEducationUserModelFromLDAP(e); u != nil && err == nil {
+			users = append(users, u)
+		} else {
+			// Skip invalid LDAP users
+			// TODO: is it really the best idea to silently skip education user LDAP data that is invalid, rather than returning an error?
+		}
+	}
+	return users, nil
+}
+
+func (i *LDAP) educationUserToUser(eduUser libregraph.EducationUser) *libregraph.User {
+	user := libregraph.NewUser(*eduUser.DisplayName, *eduUser.OnPremisesSamAccountName)
+	user.Surname = eduUser.Surname
+	user.AccountEnabled = eduUser.AccountEnabled
+	user.GivenName = eduUser.GivenName
+	user.Mail = eduUser.Mail
+	user.UserType = eduUser.UserType
+	user.Identities = eduUser.Identities
+
+	return user
+}
+
+func (i *LDAP) userToEducationUser(user libregraph.User, e *ldap.Entry) (*libregraph.EducationUser, error) {
+	eduUser := libregraph.NewEducationUser()
+	eduUser.Id = user.Id
+	eduUser.OnPremisesSamAccountName = &user.OnPremisesSamAccountName
+	eduUser.Surname = user.Surname
+	eduUser.AccountEnabled = user.AccountEnabled
+	eduUser.GivenName = user.GivenName
+	eduUser.DisplayName = &user.DisplayName
+	eduUser.Mail = user.Mail
+	eduUser.UserType = user.UserType
+
+	if e != nil {
+		// Set the education User specific Attributes from the supplied LDAP Entry
+		if primaryRole := e.GetEqualFoldAttributeValue(i.educationConfig.userAttributeMap.primaryRole); primaryRole != "" {
+			eduUser.SetPrimaryRole(primaryRole)
+		}
+
+		if externalID := e.GetEqualFoldAttributeValue(i.educationConfig.userAttributeMap.externalID); externalID != "" {
+			eduUser.SetExternalId(externalID)
+		}
+	}
+
+	return eduUser, nil
+}
+
+func (i *LDAP) educationUserToLDAPAttrValues(user libregraph.EducationUser, attrs ldapAttributeValues) (ldapAttributeValues, error) {
+	if role, ok := user.GetPrimaryRoleOk(); ok {
+		attrs[i.educationConfig.userAttributeMap.primaryRole] = []string{*role}
+	}
+
+	if externalID, ok := user.GetExternalIdOk(); ok {
+		attrs[i.educationConfig.userAttributeMap.externalID] = []string{*externalID}
+	}
+	attrs["objectClass"] = append(attrs["objectClass"], i.educationConfig.userObjectClass)
+	return attrs, nil
+}
+
+func (i *LDAP) educationUserToAddRequest(user libregraph.EducationUser) (*ldap.AddRequest, error) {
+	plainUser := i.educationUserToUser(user)
+	ldapAttrs, err := i.userToLDAPAttrValues(*plainUser)
+	if err != nil {
+		return nil, err
+	}
+	ldapAttrs, err = i.educationUserToLDAPAttrValues(user, ldapAttrs)
+	if err != nil {
+		return nil, err
+	}
+
+	ar := ldap.NewAddRequest(i.getUserLDAPDN(*plainUser), nil)
+
+	for attrType, values := range ldapAttrs {
+		ar.Attribute(attrType, values)
+	}
+	return ar, nil
+}
+
+func (i *LDAP) createEducationUserModelFromLDAP(e *ldap.Entry) (*libregraph.EducationUser, error) {
+	user, err := i.createUserModelFromLDAP(e)
+	if err != nil {
+		return nil, err
+	}
+	return i.userToEducationUser(*user, e)
+}
+
+func (i *LDAP) getEducationUserAttrTypes() []string {
+	return []string{
+		i.userAttributeMap.displayName,
+		i.userAttributeMap.id,
+		i.userAttributeMap.mail,
+		i.userAttributeMap.userName,
+		i.userAttributeMap.surname,
+		i.userAttributeMap.givenName,
+		i.userAttributeMap.accountEnabled,
+		i.userAttributeMap.userType,
+		i.userAttributeMap.identities,
+		i.educationConfig.userAttributeMap.primaryRole,
+		i.educationConfig.userAttributeMap.externalID,
+		i.educationConfig.memberOfSchoolAttribute,
+	}
+}
+
+func (i *LDAP) getEducationUserByDN(dn string) (*ldap.Entry, error) {
+	filter := fmt.Sprintf("(objectClass=%s)", i.educationConfig.userObjectClass)
+
+	if i.userFilter != "" {
+		filter = fmt.Sprintf("(&%s(%s))", filter, i.userFilter)
+	}
+
+	return i.getEntryByDN(dn, i.getEducationUserAttrTypes(), filter)
+}
+
+// Retrieves a single education user from LDAP by its namd or id.
+//
+// It never returns nil for the *ldap.Entry:
+//   - if no object is found, it returns a ErrNotFound error
+//   - if more than one object is found, it returns a ErrTooManyResults error
+//   - if exactly one object is found, it returns that entry and no error
+func (i *LDAP) getEducationUserByNameOrID(nameOrID string) (*ldap.Entry, error) {
+	return i.getEducationObjectByNameOrID(
+		nameOrID,
+		i.userAttributeMap.userName,
+		i.userAttributeMap.id,
+		i.userFilter,
+		i.educationConfig.userObjectClass,
+		i.userBaseDN,
+		i.getEducationUserAttrTypes(),
+	)
+}
+
+// Retrieves a single object from LDAP by its namd or id.
+//
+// It never returns nil for the *ldap.Entry:
+//   - if no object is found, it returns a ErrNotFound error
+//   - if more than one object is found, it returns a ErrTooManyResults error
+//   - if exactly one object is found, it returns that entry and no error
+func (i *LDAP) getEducationObjectByNameOrID(nameOrID, nameAttribute, idAttribute, objectFilter, objectClass, baseDN string, attributes []string) (*ldap.Entry, error) {
+	nameOrID = ldap.EscapeFilter(nameOrID)
+	filter := fmt.Sprintf("(|(%s=%s)(%s=%s))", nameAttribute, nameOrID, idAttribute, nameOrID)
+	return i.getEducationObjectByFilter(filter, baseDN, objectFilter, objectClass, attributes)
+}
+
+// Retrieves a single object from LDAP by a filter.
+//
+// It never returns nil for the *ldap.Entry:
+//   - if no object is found, it returns a ErrNotFound error
+//   - if more than one object is found, it returns a ErrTooManyResults error
+//   - if exactly one object is found, it returns that entry and no error
+func (i *LDAP) getEducationObjectByFilter(filter, baseDN, objectFilter, objectClass string, attributes []string) (*ldap.Entry, error) {
+	filter = fmt.Sprintf("(&%s(objectClass=%s)%s)", objectFilter, objectClass, filter)
+	return i.searchLDAPEntryByFilter(baseDN, attributes, filter)
+}

@@ -1,0 +1,255 @@
+package fileinfo
+
+// UserExtraInfo contains additional user info shared across collaborative
+// editing views, such as the user's avatar image and email.
+// https://sdk.collaboraonline.com/docs/advanced_integration.html#userextrainfo
+type UserExtraInfo struct {
+	Avatar string `json:"avatar,omitempty"`
+	Mail   string `json:"mail,omitempty"`
+}
+
+// Collabora fileInfo properties
+//
+// Collabora WOPI check file info specification:
+// https://sdk.collaboraonline.com/docs/advanced_integration.html
+type Collabora struct {
+	//
+	// Response properties
+	//
+
+	// Copied from MS WOPI
+	BaseFileName string `json:"BaseFileName,omitempty"`
+	// Copied from MS WOPI
+	DisablePrint bool `json:"DisablePrint"`
+	// Copied from MS WOPI
+	OwnerID string `json:"OwnerId,omitempty"`
+	// A string for the domain the host page sends/receives PostMessages from, we only listen to messages from this domain.
+	PostMessageOrigin string `json:"PostMessageOrigin,omitempty"`
+	// copied from MS WOPI
+	Size int64 `json:"Size"`
+	// The file version, it changes with every change of the file and never repeats.
+	Version string `json:"Version,omitempty"`
+	// The last modification of the file as UTC time in ISO 8601 round-trip format.
+	LastModifiedTime string `json:"LastModifiedTime,omitempty"`
+	// If set to true, the file cannot be changed by this user.
+	ReadOnly bool `json:"ReadOnly"`
+	// If set to true, PutFile and PutRelativeFile are available.
+	SupportsUpdate bool `json:"SupportsUpdate"`
+	// The ID of file (like the wopi/files/ID) can be a non-existing file. In that case, the file will be created from a template when the template (eg. an OTT file) is specified as TemplateSource in the CheckFileInfo response. The TemplateSource is supposed to be an URL like https://somewhere/accessible/file.ott that is accessible by the Online. For the actual saving of the content, normal PutFile mechanism will be used.
+	TemplateSource string `json:"TemplateSource,omitempty"`
+	// copied from MS WOPI
+	UserCanWrite bool `json:"UserCanWrite"`
+	// copied from MS WOPI
+	UserCanNotWriteRelative bool `json:"UserCanNotWriteRelative"`
+	// copied from MS WOPI
+	UserID string `json:"UserId,omitempty"`
+	// copied from MS WOPI
+	UserFriendlyName string `json:"UserFriendlyName,omitempty"`
+
+	//
+	// URL properties
+	//
+
+	// The page to navigate to when the editor closes or fails unrecoverably.
+	CloseURL string `json:"CloseUrl,omitempty"`
+	// A link to download the original file.
+	DownloadURL string `json:"DownloadUrl,omitempty"`
+	// The page that lets the user share the file.
+	FileSharingURL string `json:"FileSharingUrl,omitempty"`
+	// The page that shows the version history of the file.
+	FileVersionURL string `json:"FileVersionUrl,omitempty"`
+	// The host page that opens the file in edit mode.
+	HostEditURL string `json:"HostEditUrl,omitempty"`
+	// The host page that opens the file in view mode.
+	HostViewURL string `json:"HostViewUrl,omitempty"`
+
+	//
+	// Breadcrumb properties
+	//
+
+	// The name shown as the brand part of the breadcrumb, the space name.
+	BreadcrumbBrandName string `json:"BreadcrumbBrandName,omitempty"`
+	// The page to navigate to from the breadcrumb brand.
+	BreadcrumbBrandURL string `json:"BreadcrumbBrandUrl,omitempty"`
+	// The name of the folder that contains the file.
+	BreadcrumbFolderName string `json:"BreadcrumbFolderName,omitempty"`
+	// The page to navigate to from the breadcrumb folder.
+	BreadcrumbFolderURL string `json:"BreadcrumbFolderUrl,omitempty"`
+
+	//
+	// Extended response properties
+	//
+
+	// If set to true, this will enable the insertion of images chosen from the WOPI storage. A UI_InsertGraphic postMessage will be send to the WOPI host to request the UI to select the file.
+	EnableInsertRemoteImage bool `json:"EnableInsertRemoteImage,omitempty"`
+	// If set to true, this will enable the insertion of remote files chosen from the WOPI storage. A UI_InsertFile postMessage will be sent to the WOPI host to request the UI to select the file. This enables multimedia insertion and document comparison features.
+	EnableInsertRemoteFile bool `json:"EnableInsertRemoteFile,omitempty"`
+	// If set to true, this will enable picking a link to a remote file from the WOPI storage. A UI_PickLink postMessage will be sent to the WOPI host to request the UI to select the file. The host is expected to reply with an Action_InsertLink message carrying the file URL.
+	EnableRemoteLinkPicker bool `json:"EnableRemoteLinkPicker,omitempty"`
+	// If set to true, this will disable the insertion of image chosen from the local device. If EnableInsertRemoteImage is not set to true, then inserting images files is not possible.
+	DisableInsertLocalImage bool `json:"DisableInsertLocalImage,omitempty"`
+	// If set to true, hides the print option from the file menu bar in the UI.
+	HidePrintOption bool `json:"HidePrintOption,omitempty"`
+	// If set to true, hides the save button from the toolbar and file menubar in the UI.
+	HideSaveOption bool `json:"HideSaveOption,omitempty"`
+	// Hides Download as option in the file menubar.
+	HideExportOption bool `json:"HideExportOption,omitempty"`
+	// Disables export functionality in backend. If set to true, HideExportOption is assumed to be true
+	DisableExport bool `json:"DisableExport,omitempty"`
+	// Disables copying from the document in libreoffice online backend. Pasting into the document would still be possible. However, it is still possible to do an “internal” cut/copy/paste.
+	DisableCopy bool `json:"DisableCopy,omitempty"`
+	// Disables displaying of the explanation text on the overlay when the document becomes inactive or killed. With this, the JS integration must provide the user with appropriate message when it gets Session_Closed or User_Idle postMessages.
+	DisableInactiveMessages bool `json:"DisableInactiveMessages,omitempty"`
+	// Indicate that the integration wants to handle the downloading of pdf for printing or svg for slideshows or exported document, because it cannot rely on browser’s support for downloading.
+	DownloadAsPostMessage bool `json:"DownloadAsPostMessage,omitempty"`
+	// If set to true, a UI_Edit postMessage is sent when the user switches to edit mode.
+	EditModePostMessage bool `json:"EditModePostMessage,omitempty"`
+	// Similar to download as, doctype extensions can be provided for save-as. In this case the new file is loaded in the integration instead of downloaded.
+	SaveAsPostmessage bool `json:"SaveAsPostmessage,omitempty"`
+	// If set to true, it allows the document owner (the one with OwnerId =UserId) to send a closedocument message (see protocol.txt)
+	EnableOwnerTermination bool `json:"EnableOwnerTermination,omitempty"`
+	// If set to true, the user has administrator rights in the integration. Some functionality of Collabora Online, such as update check and server audit are supposed to be shown to administrators only.
+	IsAdminUser bool `json:"IsAdminUser"`
+	// If set to true, some functionality of Collabora which is supposed to be shown to authenticated users only is hidden
+	IsAnonymousUser bool `json:"IsAnonymousUser,omitempty"`
+	// If set to true, the feature lock configured in Collabora restricts the commands available to this user.
+	IsUserLocked bool `json:"IsUserLocked,omitempty"`
+
+	// JSON object that contains additional info about the user, namely the avatar image.
+	// Shared among all views in collaborative editing sessions.
+	UserExtraInfo *UserExtraInfo `json:"UserExtraInfo,omitempty"`
+	// JSON object that contains additional info about the user, but unlike the UserExtraInfo it is not shared among the views in collaborative editing sessions.
+	//UserPrivateInfo -> requires definition, currently not used
+
+	// If set to a non-empty string, is used for rendering a watermark-like text on each tile of the document.
+	WatermarkText string `json:"WatermarkText,omitempty"`
+
+	//
+	// Undocumented (from source code)
+	//
+
+	EnableShare bool `json:"EnableShare,omitempty"`
+	// If set to "true", user list on the status bar will be hidden
+	// If set to "mobile" | "tablet" | "desktop", will be hidden on a specified device
+	// (may be joint, delimited by commas eg. "mobile,tablet")
+	HideUserList      string `json:"HideUserList,omitempty"`
+	SupportsLocks     bool   `json:"SupportsLocks"`
+	SupportsRename    bool   `json:"SupportsRename"`
+	UserCanRename     bool   `json:"UserCanRename"`
+	BreadcrumbDocName string `json:"BreadcrumbDocName,omitempty"`
+}
+
+// SetProperties will set the file properties for the Collabora implementation.
+func (cinfo *Collabora) SetProperties(props map[string]any) {
+	for key, value := range props {
+		switch key {
+		case KeyBaseFileName:
+			cinfo.BaseFileName = value.(string)
+		case KeyDisablePrint:
+			cinfo.DisablePrint = value.(bool)
+		case KeyOwnerID:
+			cinfo.OwnerID = value.(string)
+		case KeyPostMessageOrigin:
+			cinfo.PostMessageOrigin = value.(string)
+		case KeySize:
+			cinfo.Size = value.(int64)
+		case KeyVersion:
+			cinfo.Version = value.(string)
+		case KeyLastModifiedTime:
+			cinfo.LastModifiedTime = value.(string)
+		case KeyReadOnly:
+			cinfo.ReadOnly = value.(bool)
+		case KeyTemplateSource:
+			cinfo.TemplateSource = value.(string)
+		case KeyUserCanWrite:
+			cinfo.UserCanWrite = value.(bool)
+		case KeyUserCanNotWriteRelative:
+			cinfo.UserCanNotWriteRelative = value.(bool)
+		case KeyUserID:
+			cinfo.UserID = value.(string)
+		case KeyUserFriendlyName:
+			cinfo.UserFriendlyName = value.(string)
+
+		case KeyCloseURL:
+			cinfo.CloseURL = value.(string)
+		case KeyDownloadURL:
+			cinfo.DownloadURL = value.(string)
+		case KeyFileSharingURL:
+			cinfo.FileSharingURL = value.(string)
+		case KeyFileVersionURL:
+			cinfo.FileVersionURL = value.(string)
+		case KeyHostEditURL:
+			cinfo.HostEditURL = value.(string)
+		case KeyHostViewURL:
+			cinfo.HostViewURL = value.(string)
+
+		case KeyEnableInsertRemoteImage:
+			cinfo.EnableInsertRemoteImage = value.(bool)
+		case KeyEnableInsertRemoteFile:
+			cinfo.EnableInsertRemoteFile = value.(bool)
+		case KeyEnableRemoteLinkPicker:
+			cinfo.EnableRemoteLinkPicker = value.(bool)
+		case KeyDisableInsertLocalImage:
+			cinfo.DisableInsertLocalImage = value.(bool)
+		case KeyHidePrintOption:
+			cinfo.HidePrintOption = value.(bool)
+		case KeyHideSaveOption:
+			cinfo.HideSaveOption = value.(bool)
+		case KeyHideExportOption:
+			cinfo.HideExportOption = value.(bool)
+		case KeyDisableExport:
+			cinfo.DisableExport = value.(bool)
+		case KeyDisableCopy:
+			cinfo.DisableCopy = value.(bool)
+		case KeyDisableInactiveMessages:
+			cinfo.DisableInactiveMessages = value.(bool)
+		case KeyDownloadAsPostMessage:
+			cinfo.DownloadAsPostMessage = value.(bool)
+		case KeyEditModePostMessage:
+			cinfo.EditModePostMessage = value.(bool)
+		case KeySaveAsPostmessage:
+			cinfo.SaveAsPostmessage = value.(bool)
+		case KeyEnableOwnerTermination:
+			cinfo.EnableOwnerTermination = value.(bool)
+		case KeyUserExtraInfo:
+			cinfo.UserExtraInfo = value.(*UserExtraInfo)
+		//UserPrivateInfo -> requires definition, currently not used
+		case KeyWatermarkText:
+			cinfo.WatermarkText = value.(string)
+		case KeyIsAdminUser:
+			cinfo.IsAdminUser = value.(bool)
+		case KeyIsAnonymousUser:
+			cinfo.IsAnonymousUser = value.(bool)
+		case KeyIsUserLocked:
+			cinfo.IsUserLocked = value.(bool)
+
+		case KeyEnableShare:
+			cinfo.EnableShare = value.(bool)
+		case KeyHideUserList:
+			cinfo.HideUserList = value.(string)
+		case KeySupportsLocks:
+			cinfo.SupportsLocks = value.(bool)
+		case KeySupportsRename:
+			cinfo.SupportsRename = value.(bool)
+		case KeyUserCanRename:
+			cinfo.UserCanRename = value.(bool)
+		case KeyBreadcrumbDocName:
+			cinfo.BreadcrumbDocName = value.(string)
+		case KeySupportsUpdate:
+			cinfo.SupportsUpdate = value.(bool)
+		case KeyBreadcrumbBrandName:
+			cinfo.BreadcrumbBrandName = value.(string)
+		case KeyBreadcrumbBrandURL:
+			cinfo.BreadcrumbBrandURL = value.(string)
+		case KeyBreadcrumbFolderName:
+			cinfo.BreadcrumbFolderName = value.(string)
+		case KeyBreadcrumbFolderURL:
+			cinfo.BreadcrumbFolderURL = value.(string)
+		}
+	}
+}
+
+// GetTarget will always return "Collabora"
+func (cinfo *Collabora) GetTarget() string {
+	return "Collabora"
+}

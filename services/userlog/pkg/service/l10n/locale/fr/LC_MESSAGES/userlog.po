@@ -1,0 +1,133 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# 
+# Translators:
+# Benoît Aguesse, 2026
+# eric_G <junk.eg@free.fr>, 2026
+# 
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: \n"
+"Report-Msgid-Bugs-To: EMAIL\n"
+"POT-Creation-Date: 2026-10-14 23:16+0000\n"
+"PO-Revision-Date: 2025-01-27 10:17+0000\n"
+"Last-Translator: eric_G <junk.eg@free.fr>, 2026\n"
+"Language-Team: French (https://app.transifex.com/opencloud-eu/teams/204053/fr/)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: fr\n"
+"Plural-Forms: nplurals=3; plural=(n == 0 || n == 1) ? 0 : n != 0 && n % 1000000 == 0 ? 1 : 2;\n"
+
+#: pkg/service/templates.go:39
+msgid "Access to Space {space} lost"
+msgstr "Accès à l'Espace {space} perdu"
+
+#: pkg/service/templates.go:59
+msgid "Access to {resource} expired"
+msgstr "L'accès à {resource} a expiré"
+
+#: pkg/service/templates.go:64
+msgid ""
+"Attention! The instance will be shut down and deprovisioned on {date}. "
+"Download all your data before that date as no access past that date is "
+"possible."
+msgstr ""
+"Attention ! L'instance sera fermée et déprovisionnée le {date}. Téléchargez "
+"toutes vos données avant cette date car aucun accès ne sera possible après "
+"cette date."
+
+#: pkg/service/templates.go:63
+msgid "Instance will be shut down and deprovisioned"
+msgstr "L'instance sera fermée et déprovisionnée."
+
+#: pkg/service/templates.go:38
+msgid "Membership expired"
+msgstr "Adhésion expirée"
+
+#: pkg/service/templates.go:13
+msgid "Policies enforced"
+msgstr "Politiques appliquées"
+
+#: pkg/service/templates.go:23
+msgid "Removed from Space"
+msgstr "Retiré de l'Espace"
+
+#: pkg/service/templates.go:43
+msgid "Resource shared"
+msgstr "Ressource partagée"
+
+#: pkg/service/templates.go:48
+msgid "Resource unshared"
+msgstr "Ressource non partagée"
+
+#: pkg/service/templates.go:58
+msgid "Share expired"
+msgstr "Partage expiré"
+
+#: pkg/service/templates.go:33
+msgid "Space deleted"
+msgstr "Espace supprimé"
+
+#: pkg/service/templates.go:28
+msgid "Space disabled"
+msgstr "Espace désactivé"
+
+#: pkg/service/templates.go:18
+msgid "Space shared"
+msgstr "Espace partagé"
+
+#: pkg/service/templates.go:14
+msgid ""
+"The file {resource} was deleted because it violates the restrictions of this"
+" cloud. This could be due to an unsupported file type, potentially harmful "
+"or prohibited content, or file size limits."
+msgstr ""
+"Le fichier {resource} a été supprimé car il violait les restrictions de ce "
+"cloud. Cela peut être dû à un type de fichier non pris en charge, du contenu"
+" potentiellement malveillant ou prohibé ou des limites de taille de "
+"fichiers."
+
+#: pkg/service/templates.go:8
+msgid "Virus found"
+msgstr "Virus détecté"
+
+#: pkg/service/templates.go:9
+msgid "Virus found in {resource}. Upload not possible. Virus: {virus}"
+msgstr ""
+"Virus trouvé dans {resource}. Téléversement impossible. Virus : {virus}"
+
+#: pkg/service/templates.go:53
+msgid "You have been mentioned"
+msgstr "Votre nom a été mentionné"
+
+#: pkg/service/templates.go:19
+msgid "{user} added you to Space {space}"
+msgstr "{user} vous a ajouté à l'Espace {space}"
+
+#: pkg/service/templates.go:34
+msgid "{user} deleted Space {space}"
+msgstr "{user} a supprimé l'Espace {space}"
+
+#: pkg/service/templates.go:29
+msgid "{user} disabled Space {space}"
+msgstr "{utilisateur} a désactivé Espace {espace}"
+
+#: pkg/service/templates.go:54
+msgid "{user} mentioned you in {resource}"
+msgstr "{user} vous a mentionné dans {resource}"
+
+#: pkg/service/templates.go:24
+msgid "{user} removed you from Space {space}"
+msgstr "{user} vous a retiré de l'Espace {space}"
+
+#: pkg/service/templates.go:44
+msgid "{user} shared {resource} with you"
+msgstr "{user} a partagé {resource} avec vous"
+
+#: pkg/service/templates.go:49
+msgid "{user} unshared {resource} with you"
+msgstr "{user} a annulé le partage de {resource} avec vous"

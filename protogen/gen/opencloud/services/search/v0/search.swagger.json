@@ -1,0 +1,647 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "OpenCloud search",
+    "version": "1.0.0",
+    "contact": {
+      "name": "OpenCloud GmbH",
+      "url": "https://github.com/opencloud-eu/opencloud",
+      "email": "support@opencloud.eu"
+    },
+    "license": {
+      "name": "Apache-2.0",
+      "url": "https://github.com/opencloud-eu/opencloud/blob/main/LICENSE"
+    }
+  },
+  "tags": [
+    {
+      "name": "SearchProvider"
+    },
+    {
+      "name": "IndexProvider"
+    }
+  ],
+  "schemes": [
+    "http",
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "paths": {
+    "/api/v0/search/index-space": {
+      "post": {
+        "summary": "IndexSpace (re)indexes one or all spaces. The response is streamed, sending\nprogress information after each space has been indexed.",
+        "operationId": "SearchProvider_IndexSpace",
+        "responses": {
+          "200": {
+            "description": "A successful response.(streaming responses)",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "result": {
+                  "$ref": "#/definitions/v0IndexSpaceResponse"
+                },
+                "error": {
+                  "$ref": "#/definitions/googlerpcStatus"
+                }
+              },
+              "title": "Stream result of v0IndexSpaceResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v0IndexSpaceRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SearchProvider"
+        ]
+      }
+    },
+    "/api/v0/search/index/search": {
+      "post": {
+        "operationId": "IndexProvider_Search",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v0SearchIndexResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v0SearchIndexRequest"
+            }
+          }
+        ],
+        "tags": [
+          "IndexProvider"
+        ]
+      }
+    },
+    "/api/v0/search/search": {
+      "post": {
+        "operationId": "SearchProvider_Search",
+        "responses": {
+          "200": {
+            "description": "A successful response.",
+            "schema": {
+              "$ref": "#/definitions/v0SearchResponse"
+            }
+          },
+          "default": {
+            "description": "An unexpected error response.",
+            "schema": {
+              "$ref": "#/definitions/googlerpcStatus"
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "body",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/v0SearchRequest"
+            }
+          }
+        ],
+        "tags": [
+          "SearchProvider"
+        ]
+      }
+    }
+  },
+  "definitions": {
+    "googlerpcStatus": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "message": {
+          "type": "string"
+        },
+        "details": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/protobufAny"
+          }
+        }
+      }
+    },
+    "protobufAny": {
+      "type": "object",
+      "properties": {
+        "@type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": {}
+    },
+    "v0Audio": {
+      "type": "object",
+      "properties": {
+        "album": {
+          "type": "string"
+        },
+        "albumArtist": {
+          "type": "string"
+        },
+        "artist": {
+          "type": "string"
+        },
+        "bitrate": {
+          "type": "string",
+          "format": "int64"
+        },
+        "composers": {
+          "type": "string"
+        },
+        "copyright": {
+          "type": "string"
+        },
+        "disc": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "discCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "duration": {
+          "type": "string",
+          "format": "int64"
+        },
+        "genre": {
+          "type": "string"
+        },
+        "hasDrm": {
+          "type": "boolean"
+        },
+        "isVariableBitrate": {
+          "type": "boolean"
+        },
+        "title": {
+          "type": "string"
+        },
+        "track": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "trackCount": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "year": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v0Entity": {
+      "type": "object",
+      "properties": {
+        "ref": {
+          "$ref": "#/definitions/v0Reference"
+        },
+        "id": {
+          "$ref": "#/definitions/v0ResourceID"
+        },
+        "name": {
+          "type": "string"
+        },
+        "etag": {
+          "type": "string"
+        },
+        "size": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "lastModifiedTime": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "mimeType": {
+          "type": "string"
+        },
+        "permissions": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "format": "uint64"
+        },
+        "deleted": {
+          "type": "boolean"
+        },
+        "shareRootName": {
+          "type": "string"
+        },
+        "parentId": {
+          "$ref": "#/definitions/v0ResourceID"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "highlights": {
+          "type": "string"
+        },
+        "audio": {
+          "$ref": "#/definitions/v0Audio"
+        },
+        "location": {
+          "$ref": "#/definitions/v0GeoCoordinates"
+        },
+        "remoteItemId": {
+          "$ref": "#/definitions/v0ResourceID"
+        },
+        "image": {
+          "$ref": "#/definitions/v0Image"
+        },
+        "photo": {
+          "$ref": "#/definitions/v0Photo"
+        },
+        "favorites": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "motionPhoto": {
+          "$ref": "#/definitions/v0MotionPhoto"
+        },
+        "video": {
+          "$ref": "#/definitions/v0Video"
+        },
+        "livePhoto": {
+          "$ref": "#/definitions/v0LivePhoto"
+        }
+      }
+    },
+    "v0GeoCoordinates": {
+      "type": "object",
+      "properties": {
+        "altitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "latitude": {
+          "type": "number",
+          "format": "double"
+        },
+        "longitude": {
+          "type": "number",
+          "format": "double"
+        }
+      }
+    },
+    "v0Image": {
+      "type": "object",
+      "properties": {
+        "width": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v0IndexSpaceRequest": {
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        },
+        "forceReindex": {
+          "type": "boolean"
+        },
+        "concurrency": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v0IndexSpaceResponse": {
+      "type": "object",
+      "properties": {
+        "spaceId": {
+          "type": "string",
+          "description": "The id of the space that has just been indexed."
+        },
+        "spaceDuration": {
+          "type": "string",
+          "description": "The duration it took to index this space."
+        },
+        "indexedSpaces": {
+          "type": "string",
+          "format": "int64",
+          "description": "The number of spaces that have been indexed so far."
+        },
+        "totalSpaces": {
+          "type": "string",
+          "format": "int64",
+          "description": "The total number of spaces that are being indexed."
+        },
+        "error": {
+          "type": "string",
+          "description": "Contains an error message in case indexing this particular space failed."
+        },
+        "status": {
+          "$ref": "#/definitions/v0IndexSpaceResponseStatus",
+          "description": "The outcome of indexing this particular space."
+        }
+      }
+    },
+    "v0IndexSpaceResponseStatus": {
+      "type": "string",
+      "enum": [
+        "STATUS_UNKNOWN",
+        "STATUS_SUCCESS",
+        "STATUS_SKIPPED",
+        "STATUS_ERROR"
+      ],
+      "default": "STATUS_UNKNOWN",
+      "description": " - STATUS_SUCCESS: The space has been indexed successfully.\n - STATUS_SKIPPED: The space has been skipped because it is disabled. It will be indexed\nonce it gets enabled again.\n - STATUS_ERROR: Indexing the space failed, see the error field for details."
+    },
+    "v0LivePhoto": {
+      "type": "object",
+      "properties": {
+        "contentId": {
+          "type": "string"
+        },
+        "stillImageTimeUs": {
+          "type": "string",
+          "format": "int64"
+        },
+        "auto": {
+          "type": "boolean"
+        },
+        "vitalityScore": {
+          "type": "number",
+          "format": "double"
+        },
+        "vitalityScoringVersion": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v0Match": {
+      "type": "object",
+      "properties": {
+        "entity": {
+          "$ref": "#/definitions/v0Entity",
+          "title": "the matched entity"
+        },
+        "score": {
+          "type": "number",
+          "format": "float",
+          "title": "the match score"
+        }
+      }
+    },
+    "v0MotionPhoto": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "presentationTimestampUs": {
+          "type": "string",
+          "format": "int64"
+        },
+        "videoSize": {
+          "type": "string",
+          "format": "int64"
+        }
+      }
+    },
+    "v0Photo": {
+      "type": "object",
+      "properties": {
+        "cameraMake": {
+          "type": "string"
+        },
+        "cameraModel": {
+          "type": "string"
+        },
+        "exposureDenominator": {
+          "type": "number",
+          "format": "float"
+        },
+        "exposureNumerator": {
+          "type": "number",
+          "format": "float"
+        },
+        "fNumber": {
+          "type": "number",
+          "format": "float"
+        },
+        "focalLength": {
+          "type": "number",
+          "format": "float"
+        },
+        "iso": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "orientation": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "takenDateTime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "v0Reference": {
+      "type": "object",
+      "properties": {
+        "resourceId": {
+          "$ref": "#/definitions/v0ResourceID"
+        },
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "v0ResourceID": {
+      "type": "object",
+      "properties": {
+        "storageId": {
+          "type": "string"
+        },
+        "opaqueId": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        }
+      }
+    },
+    "v0SearchIndexRequest": {
+      "type": "object",
+      "properties": {
+        "pageSize": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Optional. The maximum number of entries to return in the response"
+        },
+        "pageToken": {
+          "type": "string",
+          "title": "Optional. A pagination token returned from a previous call to `Get`\nthat indicates from where search should continue"
+        },
+        "query": {
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/definitions/v0Reference"
+        }
+      }
+    },
+    "v0SearchIndexResponse": {
+      "type": "object",
+      "properties": {
+        "matches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v0Match"
+          }
+        },
+        "nextPageToken": {
+          "type": "string",
+          "title": "Token to retrieve the next page of results, or empty if there are no\nmore results in the list"
+        },
+        "totalMatches": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v0SearchRequest": {
+      "type": "object",
+      "properties": {
+        "pageSize": {
+          "type": "integer",
+          "format": "int32",
+          "title": "Optional. The maximum number of entries to return in the response"
+        },
+        "pageToken": {
+          "type": "string",
+          "title": "Optional. A pagination token returned from a previous call to `Get`\nthat indicates from where search should continue"
+        },
+        "query": {
+          "type": "string"
+        },
+        "ref": {
+          "$ref": "#/definitions/v0Reference"
+        }
+      }
+    },
+    "v0SearchResponse": {
+      "type": "object",
+      "properties": {
+        "matches": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/v0Match"
+          }
+        },
+        "nextPageToken": {
+          "type": "string",
+          "title": "Token to retrieve the next page of results, or empty if there are no\nmore results in the list"
+        },
+        "totalMatches": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    },
+    "v0Video": {
+      "type": "object",
+      "properties": {
+        "audioBitsPerSample": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "audioChannels": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "audioFormat": {
+          "type": "string"
+        },
+        "audioSamplesPerSecond": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "bitrate": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "duration": {
+          "type": "string",
+          "format": "int64"
+        },
+        "fourCC": {
+          "type": "string"
+        },
+        "frameRate": {
+          "type": "number",
+          "format": "double"
+        },
+        "height": {
+          "type": "integer",
+          "format": "int32"
+        },
+        "width": {
+          "type": "integer",
+          "format": "int32"
+        }
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "Developer Manual",
+    "url": "https://docs.opencloud.eu/services/search/"
+  }
+}

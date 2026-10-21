@@ -1,0 +1,99 @@
+version: "2"
+run:
+  modules-download-mode: readonly
+linters:
+  default: all
+  disable:
+    - containedctx
+    - contextcheck # FIXME: causes panic in graph service
+    - cyclop
+    - depguard # Disabled for now; needs configuration.
+    - dupl
+    - err113
+    - errorlint
+    - exhaustive
+    - exhaustruct
+    - exhaustruct_v5
+    - forbidigo
+    - forcetypeassert
+    - funlen
+    - gochecknoglobals
+    - gocognit
+    - gocritic
+    - gomodguard # Replaced by gomodguard_v2.
+    - godot
+    - godox
+    - ireturn
+    - lll
+    - nestif
+    - nlreturn
+    - noctx
+    - nonamedreturns
+    - paralleltest
+    - tagliatelle
+    - testpackage
+    - unparam
+    - varnamelen
+    - whitespace
+    - wrapcheck
+    - wsl
+    - wsl_v5
+  settings:
+    gocyclo:
+      min-complexity: 35 # Some functions still need refactoring.
+    gomoddirectives:
+      replace-allow-list:
+        - github.com/studio-b12/gowebdav
+        - github.com/egirna/icap-client
+        - github.com/unrolled/secure
+        - github.com/go-micro/plugins/v4/store/nats-js-kv
+        - go-micro.dev/v4
+    interfacebloat:
+      max: 15
+    tagalign:
+      align: false
+      sort: true
+      order:
+        - json
+        - yaml
+        - mapstructure
+        - env
+        - desc
+        - introductionVersion
+        - deprecationVersion
+        - removalVersion
+        - deprecationInfo
+        - deprecationReplacement
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: _test.go
+        source: . # Exclude test files from linting.
+    paths:
+      - protogen/gen
+      - docs
+      - deployments
+      - changelog
+      - third_party$
+      - builtin$
+      - examples$
+severity:
+  default: error
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - protogen/gen
+      - docs
+      - deployments
+      - changelog
+      - third_party$
+      - builtin$
+      - examples$

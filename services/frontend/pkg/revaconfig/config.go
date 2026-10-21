@@ -1,0 +1,457 @@
+package revaconfig
+
+import (
+	"bufio"
+	"fmt"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
+	"slices"
+	"strconv"
+
+	"github.com/opencloud-eu/opencloud/pkg/capabilities"
+	"github.com/opencloud-eu/opencloud/pkg/config/defaults"
+	"github.com/opencloud-eu/opencloud/pkg/log"
+	"github.com/opencloud-eu/opencloud/pkg/version"
+	"github.com/opencloud-eu/opencloud/services/frontend/pkg/config"
+)
+
+// FrontendConfigFromStruct will adapt an OpenCloud config struct into a reva mapstructure to start a reva service.
+func FrontendConfigFromStruct(cfg *config.Config, logger log.Logger) (map[string]any, error) {
+	webURL, err := url.Parse(cfg.PublicURL)
+	if err != nil {
+		return nil, err
+	}
+	webURL.Path = path.Join(webURL.Path, "external")
+	webOpenInAppURL := webURL.String()
+
+	passwordPolicyCfg, err := passwordPolicyConfig(cfg)
+	if err != nil {
+		logger.Err(err).Send()
+		return nil, err
+	}
+
+	archivers := []map[string]any{
+		{
+			"enabled":       true,
+			"version":       "2.0.0",
+			"formats":       []string{"tar", "zip"},
+			"archiver_url":  path.Join("/", cfg.Archiver.Prefix),
+			"max_num_files": strconv.FormatInt(cfg.Archiver.MaxNumFiles, 10),
+			"max_size":      strconv.FormatInt(cfg.Archiver.MaxSize, 10),
+		},
+	}
+
+	appProviders := []map[string]any{
+		{
+			"enabled":      true,
+			"version":      "1.1.0",
+			"apps_url":     "/app/list",
+			"open_url":     "/app/open",
+			"open_web_url": "/app/open-with-web",
+			"new_url":      "/app/new",
+		},
+	}
+
+	filesCfg := map[string]any{
+		"private_links":     true,
+		"bigfilechunking":   false,
+		"blacklisted_files": []string{},
+		"undelete":          true,
+		"versioning":        true,
+		"tags":              true,
+		"archivers":         archivers,
+		"app_providers":     appProviders,
+		"favorites":         false,
+		"full_text_search":  cfg.FullTextSearch,
+	}
+
+	if cfg.DefaultUploadProtocol == "tus" {
+		filesCfg["tus_support"] = map[string]any{
+			"version":              "1.0.0",
+			"resumable":            "1.0.0",
+			"extension":            "creation,creation-with-upload",
+			"http_method_override": cfg.UploadHTTPMethodOverride,
+			"max_chunk_size":       cfg.UploadMaxChunkSize,
+		}
+	}
+
+	readOnlyUserAttributes := []string{}
+	if cfg.ReadOnlyUserAttributes != nil {
+		readOnlyUserAttributes = cfg.ReadOnlyUserAttributes
+	}
+
+	changePasswordDisabled := !cfg.LDAPServerWriteEnabled
+	if slices.Contains(readOnlyUserAttributes, "user.passwordProfile") {
+		changePasswordDisabled = true
+	}
+
+	return map[string]any{
+		"shared": map[string]any{
+			"jwt_secret":                cfg.TokenManager.JWTSecret,
+			"gatewaysvc":                cfg.Reva.Address, // Todo or address?
+			"skip_user_groups_in_token": cfg.SkipUserGroupsInToken,
+			"grpc_client_options":       cfg.Reva.GetGRPCClientConfig(),
+			"multi_tenant_enabled":      cfg.Commons.MultiTenantEnabled,
+		},
+		"http": map[string]any{
+			"network": cfg.HTTP.Protocol,
+			"address": cfg.HTTP.Addr,
+			"middlewares": map[string]any{
+				"cors": map[string]any{
+					"allowed_origins":   cfg.HTTP.CORS.AllowedOrigins,
+					"allowed_methods":   cfg.HTTP.CORS.AllowedMethods,
+					"allowed_headers":   cfg.HTTP.CORS.AllowedHeaders,
+					"allow_credentials": cfg.HTTP.CORS.AllowCredentials,
+					// currently unused
+					//"options_passthrough": ,
+					//"debug": ,
+					//"max_age": ,
+					//"priority": ,
+					//"exposed_headers": ,
+				},
+				"auth": map[string]any{
+					"credentials_by_user_agent": cfg.Middleware.Auth.CredentialsByUserAgent,
+				},
+				"prometheus": map[string]any{
+					"namespace": "opencloud",
+					"subsystem": "frontend",
+				},
+				"requestid": map[string]any{},
+			},
+			// TODO build services dynamically
+			"services": map[string]any{
+				// this reva service called "appprovider" comes from
+				// `internal/http/services/appprovider` and is a translation
+				// layer from the grpc app registry to http, used by e.g. OpenCloud Web
+				// It should not be confused with `internal/grpc/services/appprovider`
+				// which is currently only the driver for the CS3org WOPI server
+				"appprovider": map[string]any{
+					"prefix":                 cfg.AppHandler.Prefix,
+					"transfer_shared_secret": cfg.TransferSecret,
+					"timeout":                86400,
+					"insecure":               cfg.AppHandler.Insecure,
+					"webbaseuri":             webOpenInAppURL,
+					"web": map[string]any{
+						"urlparamsmapping": map[string]string{
+							// param -> value mapper
+							// these mappers are static and are only subject to change when changed in oC Web
+							"fileId": "fileid",
+							"app":    "appname",
+						},
+						"staticurlparams": map[string]string{
+							"contextRouteName": "files-spaces-personal", // FIXME: remove when https://github.com/owncloud/web/pull/7437 arrived in OpenCloud
+						},
+					},
+					"secure_view_app_addr": cfg.AppHandler.SecureViewAppAddr,
+				},
+				"archiver": map[string]any{
+					"prefix":        cfg.Archiver.Prefix,
+					"timeout":       86400,
+					"insecure":      cfg.Archiver.Insecure,
+					"max_num_files": cfg.Archiver.MaxNumFiles,
+					"max_size":      cfg.Archiver.MaxSize,
+				},
+				"ocs": map[string]any{
+					"storage_registry_svc": cfg.Reva.Address,
+					"share_prefix":         cfg.OCS.SharePrefix,
+					"home_namespace":       cfg.OCS.HomeNamespace,
+					"stat_cache_config": map[string]any{
+						"cache_store":                   cfg.OCS.StatCacheType,
+						"cache_nodes":                   cfg.OCS.StatCacheNodes,
+						"cache_database":                cfg.OCS.StatCacheDatabase,
+						"cache_table":                   cfg.OCS.StatCacheTable,
+						"cache_ttl":                     cfg.OCS.StatCacheTTL,
+						"cache_disable_persistence":     cfg.OCS.StatCacheDisablePersistence,
+						"cache_auth_username":           cfg.OCS.StatCacheAuthUsername,
+						"cache_auth_password":           cfg.OCS.StatCacheAuthPassword,
+						"cache_tls_enabled":             cfg.OCS.StatCacheEnableTLS,
+						"cache_tls_insecure":            cfg.OCS.StatCacheTLSInsecure,
+						"cache_tls_root_ca_certificate": cfg.OCS.StatCacheTLSRootCACertificate,
+					},
+					"prefix":                    cfg.OCS.Prefix,
+					"additional_info_attribute": cfg.OCS.AdditionalInfoAttribute,
+					"machine_auth_apikey":       cfg.MachineAuthAPIKey,
+					"enable_denials":            cfg.OCS.EnableDenials,
+					"list_ocm_shares":           cfg.OCS.ListOCMShares,
+					"cache_warmup_driver":       cfg.OCS.CacheWarmupDriver,
+					"cache_warmup_drivers": map[string]any{
+						"cbox": map[string]any{
+							"db_username": cfg.OCS.CacheWarmupDrivers.CBOX.DBUsername,
+							"db_password": cfg.OCS.CacheWarmupDrivers.CBOX.DBPassword,
+							"db_host":     cfg.OCS.CacheWarmupDrivers.CBOX.DBHost,
+							"db_port":     cfg.OCS.CacheWarmupDrivers.CBOX.DBPort,
+							"db_name":     cfg.OCS.CacheWarmupDrivers.CBOX.DBName,
+							"namespace":   cfg.OCS.CacheWarmupDrivers.CBOX.Namespace,
+							"gatewaysvc":  cfg.Reva.Address,
+						},
+					},
+					"config": map[string]any{
+						"version": "1.7",
+						"website": "OpenCloud",
+						"host":    cfg.PublicURL,
+						"contact": "",
+						"ssl":     "false",
+					},
+					"default_upload_protocol": cfg.DefaultUploadProtocol,
+					"capabilities": map[string]any{
+						"capabilities": map[string]any{
+							"core": map[string]any{
+								"poll_interval": 60,
+								"webdav_root":   "remote.php/webdav",
+								"status": map[string]any{
+									"installed":      true,
+									"maintenance":    false,
+									"needsDbUpgrade": false,
+									"version":        version.Legacy,
+									"versionstring":  version.LegacyString,
+									"edition":        version.Edition,
+									"productname":    "OpenCloud",
+									"product":        "OpenCloud",
+									"productversion": version.GetString(),
+									"hostname":       "",
+								},
+								"check_for_updates":   cfg.CheckForUpdates,
+								"support_url_signing": true,
+								"support_sse":         !cfg.DisableSSE,
+								"support_radicale":    !cfg.DisableRadicale,
+							},
+							"graph": map[string]any{
+								"personal_data_export": true,
+								"users": map[string]any{
+									"read_only_attributes":          readOnlyUserAttributes,
+									"create_disabled":               !cfg.LDAPServerWriteEnabled,
+									"delete_disabled":               !cfg.LDAPServerWriteEnabled,
+									"change_password_self_disabled": changePasswordDisabled,
+									"edit_login_allowed_disabled":   cfg.EditLoginAllowedDisabled,
+								},
+							},
+							"checksums": map[string]any{
+								"supported_types":       cfg.Checksums.SupportedTypes,
+								"preferred_upload_type": cfg.Checksums.PreferredUploadType,
+							},
+							"files": filesCfg,
+							"dav": map[string]any{
+								"reports": []string{"search-files"},
+							},
+							"files_sharing": map[string]any{
+								"api_enabled":                       true,
+								"group_sharing":                     true,
+								"sharing_roles":                     true,
+								"deny_access":                       cfg.OCS.EnableDenials,
+								"auto_accept_share":                 true,
+								"share_with_group_members_only":     true,
+								"share_with_membership_groups_only": true,
+								"default_permissions":               22,
+								"search_min_length":                 cfg.SearchMinLength,
+								"public": map[string]any{
+									"alias":                      true,
+									"enabled":                    true,
+									"send_mail":                  true,
+									"defaultPublicLinkShareName": "Public link",
+									"social_share":               true,
+									"upload":                     true,
+									"multiple":                   true,
+									"supports_upload_only":       true,
+									"default_permissions":        cfg.DefaultLinkPermissions,
+									"password": map[string]any{
+										"enforced": false,
+										"enforced_for": map[string]any{
+											"read_only":         cfg.OCS.PublicShareMustHavePassword,
+											"read_write":        cfg.OCS.WriteablePublicShareMustHavePassword,
+											"read_write_delete": cfg.OCS.WriteablePublicShareMustHavePassword,
+											"upload_only":       cfg.OCS.WriteablePublicShareMustHavePassword,
+										},
+									},
+									"expire_date": map[string]any{
+										"enabled": false,
+									},
+									"can_edit": true,
+								},
+								"user": map[string]any{
+									"send_mail":       true,
+									"profile_picture": false,
+									"settings": []map[string]any{
+										{
+											"enabled": true,
+											"version": "1.0.0",
+										},
+									},
+									"expire_date": map[string]any{
+										"enabled": true,
+									},
+								},
+								"user_enumeration": map[string]any{
+									"enabled":            true,
+									"group_members_only": true,
+								},
+								"federation": map[string]any{
+									"outgoing": cfg.EnableFederatedSharingOutgoing,
+									"incoming": cfg.EnableFederatedSharingIncoming,
+								},
+								"guest_links": map[string]any{
+									"enabled": cfg.Commons.EnableGuestLinks,
+								},
+							},
+							"spaces": map[string]any{
+								"version":       "1.0.0",
+								"enabled":       true,
+								"projects":      true,
+								"share_jail":    true,
+								"max_quota":     cfg.MaxQuota,
+								"default_quota": parseQuota(cfg.DefaultQuota),
+							},
+							"theme": capabilities.Default().Theme,
+							"search": map[string]any{
+								"property": map[string]any{
+									"name": map[string]any{
+										"enabled": true,
+									},
+									"mtime": map[string]any{
+										"keywords": []string{"today", "last 7 days", "last 30 days", "this year", "last year"},
+										"enabled":  true,
+									},
+									"size": map[string]any{
+										"enabled": false,
+									},
+									"mediatype": map[string]any{
+										"keywords": []string{"document", "spreadsheet", "presentation", "pdf", "image", "video", "audio", "folder", "archive"},
+										"enabled":  true,
+									},
+									"type": map[string]any{
+										"enabled": true,
+									},
+									"tag": map[string]any{
+										"enabled": true,
+									},
+									"tags": map[string]any{
+										"enabled": true,
+									},
+									"content": map[string]any{
+										"enabled": cfg.FullTextSearch,
+									},
+									"scope": map[string]any{
+										"enabled": true,
+									},
+								},
+							},
+							"password_policy": passwordPolicyCfg,
+							"notifications": map[string]any{
+								"endpoints":    []string{"list", "get", "delete"},
+								"configurable": cfg.ConfigurableNotifications,
+							},
+							"groupware": map[string]any{
+								"enabled": cfg.Groupware.Enabled,
+							},
+						},
+						"version": map[string]any{
+							"product":        "OpenCloud",
+							"edition":        version.Edition,
+							"major":          version.ParsedLegacy().Major(),
+							"minor":          version.ParsedLegacy().Minor(),
+							"micro":          version.ParsedLegacy().Patch(),
+							"string":         version.LegacyString,
+							"productversion": version.GetString(),
+						},
+					},
+					"include_ocm_sharees":   cfg.OCS.IncludeOCMSharees,
+					"show_email_in_results": cfg.OCS.ShowUserEmailInResults,
+				},
+				"ocdav": map[string]any{
+					"prefix":           cfg.OCDav.Prefix,
+					"files_namespace":  cfg.OCDav.FilesNamespace,
+					"webdav_namespace": cfg.OCDav.WebdavNamespace,
+					"shares_namespace": cfg.OCDav.SharesNamespace,
+					"ocm_namespace":    cfg.OCDav.OCMNamespace,
+					"gatewaysvc":       cfg.Reva.Address,
+					"timeout":          cfg.OCDav.Timeout,
+					"insecure":         cfg.OCDav.Insecure,
+					"enable_http_tpc":  cfg.OCDav.EnableHTTPTPC,
+					"public_url":       cfg.OCDav.PublicURL,
+					// still not supported
+					//"favorite_storage_driver":   unused,
+					//"favorite_storage_drivers":  unused,
+					"version":              version.Legacy,
+					"version_string":       version.LegacyString,
+					"edition":              version.Edition,
+					"product":              "OpenCloud",
+					"product_name":         "OpenCloud",
+					"product_version":      version.GetString(),
+					"allow_depth_infinity": cfg.OCDav.AllowPropfindDepthInfinity,
+					"validation": map[string]any{
+						"invalid_chars": cfg.OCDav.NameValidation.InvalidChars,
+						"max_length":    cfg.OCDav.NameValidation.MaxLength,
+					},
+					"url_signing_shared_secret": cfg.Commons.URLSigningSecret,
+					"machine_auth_apikey":       cfg.MachineAuthAPIKey,
+				},
+			},
+		},
+	}, nil
+}
+
+func readMultilineFile(path string) (map[string]struct{}, error) {
+	if !fileExists(path) {
+		path = filepath.Join(defaults.BaseConfigPath(), path)
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	data := make(map[string]struct{})
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			data[line] = struct{}{}
+		}
+	}
+	return data, err
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return !info.IsDir()
+}
+
+func passwordPolicyConfig(cfg *config.Config) (map[string]any, error) {
+	_maxCharacters := 72
+	if cfg.PasswordPolicy.Disabled {
+		return map[string]any{
+			"max_characters":        _maxCharacters,
+			"banned_passwords_list": nil,
+		}, nil
+	}
+	var bannedPasswordsList map[string]struct{}
+	var err error
+	if cfg.PasswordPolicy.BannedPasswordsList != "" {
+		bannedPasswordsList, err = readMultilineFile(cfg.PasswordPolicy.BannedPasswordsList)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load the banned passwords from a file %s: %w", cfg.PasswordPolicy.BannedPasswordsList, err)
+		}
+	}
+	return map[string]any{
+		"max_characters":           _maxCharacters,
+		"min_digits":               cfg.PasswordPolicy.MinDigits,
+		"min_characters":           cfg.PasswordPolicy.MinCharacters,
+		"min_lowercase_characters": cfg.PasswordPolicy.MinLowerCaseCharacters,
+		"min_uppercase_characters": cfg.PasswordPolicy.MinUpperCaseCharacters,
+		"min_special_characters":   cfg.PasswordPolicy.MinSpecialCharacters,
+		"banned_passwords_list":    bannedPasswordsList,
+	}, nil
+}
+
+// parseQuota parses a quota in bytes the same way the graph service does.
+// Empty, invalid or negative values result in 0, which means no default quota.
+func parseQuota(quota string) uint64 {
+	q, err := strconv.ParseInt(quota, 10, 64)
+	if err != nil || q < 0 {
+		return 0
+	}
+	return uint64(q)
+}

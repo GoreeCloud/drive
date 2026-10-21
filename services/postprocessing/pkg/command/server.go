@@ -1,0 +1,101 @@
+package command
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+
+	"github.com/opencloud-eu/opencloud/pkg/log"
+	"github.com/opencloud-eu/opencloud/pkg/runner"
+	"github.com/opencloud-eu/opencloud/pkg/tracing"
+	"github.com/opencloud-eu/opencloud/services/postprocessing/pkg/config"
+	"github.com/opencloud-eu/opencloud/services/postprocessing/pkg/config/parser"
+	"github.com/opencloud-eu/opencloud/services/postprocessing/pkg/server/debug"
+	"github.com/opencloud-eu/opencloud/services/postprocessing/pkg/service"
+	"github.com/opencloud-eu/reva/v2/pkg/store"
+
+	"github.com/spf13/cobra"
+	microstore "go-micro.dev/v4/store"
+)
+
+// Server is the entrypoint for the server command.
+func Server(cfg *config.Config) *cobra.Command {
+	return &cobra.Command{
+		Use:   "server",
+		Short: fmt.Sprintf("start %s service without runtime (unsupervised mode)", cfg.Service.Name),
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			err := parser.ParseConfig(cfg)
+			if err != nil {
+				fmt.Printf("%v", err)
+				os.Exit(1)
+			}
+			return err
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger := log.Configure(cfg.Service.Name, cfg.Commons, cfg.LogLevel)
+
+			var cancel context.CancelFunc
+			if cfg.Context == nil {
+				cfg.Context, cancel = signal.NotifyContext(context.Background(), runner.StopSignals...)
+				defer cancel()
+			}
+			ctx := cfg.Context
+
+			traceProvider, err := tracing.GetTraceProvider(cmd.Context(), cfg.Commons.TracesExporter, cfg.Service.Name)
+			if err != nil {
+				return err
+			}
+
+			gr := runner.NewGroup()
+			{
+				st := store.Create(
+					store.Store(cfg.Store.Store),
+					store.TTL(cfg.Store.TTL),
+					microstore.Nodes(cfg.Store.Nodes...),
+					microstore.Database(cfg.Store.Database),
+					microstore.Table(cfg.Store.Table),
+					store.Authentication(cfg.Store.AuthUsername, cfg.Store.AuthPassword),
+					store.TLSEnabled(cfg.Store.EnableTLS),
+					store.TLSInsecure(cfg.Store.TLSInsecure),
+					store.TLSRootCA(cfg.Store.TLSRootCACertificate),
+				)
+
+				svc, err := service.NewPostprocessingService(ctx, logger, st, traceProvider, cfg)
+				if err != nil {
+					return err
+				}
+
+				gr.Add(runner.New(cfg.Service.Name+".svc", func() error {
+					return svc.Run()
+				}, func() {
+					svc.Close()
+				}))
+			}
+
+			{
+				debugServer, err := debug.Server(
+					debug.Logger(logger),
+					debug.Context(ctx),
+					debug.Config(cfg),
+				)
+				if err != nil {
+					logger.Info().Err(err).Str("transport", "debug").Msg("Failed to initialize server")
+					return err
+				}
+
+				gr.Add(runner.NewGolangHttpServerRunner("postprocessing_debug", debugServer))
+			}
+
+			grResults := gr.Run(ctx)
+
+			// return the first non-nil error found in the results
+			for _, grResult := range grResults {
+				if grResult.RunnerError != nil {
+					return grResult.RunnerError
+				}
+			}
+			return nil
+		},
+	}
+}
