@@ -136,7 +136,11 @@ used by the Go embed fallback without requiring PNPM during normal Go builds.
 **Do not serve development credentials, sample accounts or unreviewed
 defaults to public networks.** Full local deployment requires supported OIDC,
 storage, message bus and API configuration, and an actual authenticated E2E
-test. A successful build is not deployment acceptance.
+test. A successful build is not deployment acceptance. The
+[isolated authenticated WebDAV acceptance gate](AUTHENTICATED-WEBDAV-ACCEPTANCE.md)
+provides an explicit, loopback-only read-only smoke path and separately gated
+disposable create/read/overwrite/delete checks; its offline CI fixture does
+**not** replace actual authenticated backend testing.
 
 ## GoreeCloud UI adoption boundary
 
