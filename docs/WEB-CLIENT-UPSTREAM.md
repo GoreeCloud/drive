@@ -23,6 +23,11 @@ release, provide a prominent corresponding-source link to end users and
 review third-party source/license and distribution obligations. This document
 is not a legal compliance certification.
 
+A dedicated [read-only upstream web-client watch](WEB-CLIENT-WATCH.json) detects
+browser-source, latest-release, and public advisory changes independently of
+the Go-server watch. It does not authorize automatic upgrades or assert that
+browser dependencies are vulnerability-free.
+
 The frontend source is imported as a pinned independent source snapshot,
 not a GitHub-native linked fork or a submodule. Its upstream Git ancestry is
 not included; reconcile upstream updates by explicit source comparisons and

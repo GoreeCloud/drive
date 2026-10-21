@@ -12,8 +12,8 @@ BASELINE_PATH = Path(__file__).resolve().parents[1] / "docs" / "UPSTREAM-WATCH.j
 UPSTREAM_REPO = "opencloud-eu/opencloud"
 
 
-def fetch_json(path):
-    url = "https://api.github.com/repos/" + UPSTREAM_REPO + "/" + path
+def fetch_json(path, upstream_repo=UPSTREAM_REPO):
+    url = "https://api.github.com/repos/" + upstream_repo + "/" + path
     headers = {
         "Accept": "application/vnd.github+json",
         "User-Agent": "GoreeCloud-Drive-Upstream-Watch",
@@ -47,8 +47,8 @@ def make_snapshot(commit, release, advisories):
     }
 
 
-def detect_changes(baseline, current):
-    if baseline.get("upstream_repo") != UPSTREAM_REPO:
+def detect_changes(baseline, current, upstream_repo=UPSTREAM_REPO):
+    if baseline.get("upstream_repo") != upstream_repo:
         raise ValueError("baseline upstream repository does not match guarded source")
     changes = []
     for field, label in (
@@ -89,26 +89,26 @@ def detect_changes(baseline, current):
     return changes
 
 
-def main():
-    baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+def main(baseline_path=BASELINE_PATH, upstream_repo=UPSTREAM_REPO):
+    baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
     try:
-        commit = fetch_json("commits/main")
-        release = fetch_json("releases/latest")
-        advisories = fetch_json("security-advisories?per_page=100")
+        commit = fetch_json("commits/main", upstream_repo)
+        release = fetch_json("releases/latest", upstream_repo)
+        advisories = fetch_json("security-advisories?per_page=100", upstream_repo)
         current = make_snapshot(commit, release, advisories)
-        findings = detect_changes(baseline, current)
+        findings = detect_changes(baseline, current, upstream_repo)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError, KeyError, TypeError) as err:
         print("UPSTREAM_WATCH_UNVERIFIED: GitHub source could not be fully checked: " + str(err), file=sys.stderr)
         return 2
 
     if findings:
-        print("UPSTREAM_REVIEW_REQUIRED: GoreeCloud Drive upstream baseline needs manual review.")
+        print(f"UPSTREAM_REVIEW_REQUIRED: {upstream_repo} baseline needs manual review.")
         for change in findings:
             print(json.dumps(change, sort_keys=True))
         print("Do not auto-merge or advance the snapshot without reviewing changes and regression tests.")
         return 1
 
-    print("UPSTREAM_NO_DRIFT: main SHA, latest public release and known advisory metadata match the last reviewed snapshot.")
+    print(f"UPSTREAM_NO_DRIFT: {upstream_repo} SHA, latest public release and known advisory metadata match reviewed baseline.")
     print("This does NOT certify that there are no vulnerabilities or that the fork is production-ready.")
     return 0
 
