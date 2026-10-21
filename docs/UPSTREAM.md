@@ -17,4 +17,6 @@ Upstream changes are reviewed, tested and selectively integrated rather than bli
 
 The initial repository's `README.md` is the GoreeCloud landing page; the unchanged upstream README from the pinned import is retained in `docs/UPSTREAM-README.md` for technical guidance. The fork maintenance policy and acceptance plan are in `docs/GOREECLOUD-FORK.md`.
 
+A [read-only OpenCloud source/release/security advisory watch](UPSTREAM-WATCH.md) records a dated public baseline, provides offline regression tests and reports upstream changes for review. It does not automatically incorporate fixes, certify security or replace deployment-specific vulnerability assessments.
+
 **Release boundary:** The source import does not prove deployed, secured, web-client-integrated, GoreeCloud UI-compliant, or production-ready functionality.

@@ -1,0 +1,20 @@
+{
+  "schema": "goreecloud.drive.upstream-watch.v1",
+  "upstream_repo": "opencloud-eu/opencloud",
+  "reviewed_at_utc": "2026-10-21",
+  "source_sha": "61ae13a1fea0bb8a36bf4b96c1d222fc84aeaa9c",
+  "latest_release": "v8.1.0",
+  "advisories": [
+    {
+      "ghsa_id": "GHSA-gf4p-7p27-26w7",
+      "severity": "medium",
+      "updated_at": "2026-07-03T12:19:13Z"
+    },
+    {
+      "ghsa_id": "GHSA-vf5j-r2hw-2hrw",
+      "severity": "high",
+      "updated_at": "2026-02-05T17:01:26Z"
+    }
+  ],
+  "interpretation": "Observed public advisory metadata only. Baseline inclusion does not assert risk is remediated or that the imported source is free of vulnerabilities. The existing announcements describe affected older release ranges; require issue-by-issue security review."
+}
