@@ -1,70 +1,79 @@
-![OpenCloud logo](https://raw.githubusercontent.com/opencloud-eu/opencloud/refs/heads/main/opencloud_logo.png)
+# GoreeCloud Drive — production-track 7.2.4
 
-[![status-badge](https://ci.opencloud.rocks/api/badges/3/status.svg)](https://ci.opencloud.rocks/repos/3)
- [![Matrix](https://img.shields.io/matrix/opencloud%3Amatrix.org?logo=matrix)](https://app.element.io/#/room/#opencloud:matrix.org)
- [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+**A self-hosted file, sharing, and collaboration platform for the GoreeCloud ecosystem.**
 
-# Server Backend
+> **Branch provenance:** This maintenance branch starts at the official [OpenCloud v7.2.4 production release](https://github.com/opencloud-eu/opencloud/releases/tag/v7.2.4) (upstream commit `1770793f2657e153836c32d32dd6d256b8531d3d`) and applies GoreeCloud branding and security documentation. The `main` branch tracks a newer rolling/development line. Neither branch is proven production-ready without end-to-end deployment acceptance.
 
 
-> [!TIP]
-> For general information about OpenCloud and how to install please visit [OpenCloud on Github](https://github.com/opencloud-eu/) and [OpenCloud GmbH](https://opencloud.eu).
+GoreeCloud Drive is the GoreeCloud-maintained **fork of [OpenCloud](https://github.com/opencloud-eu/opencloud)**. It retains OpenCloud's Go backend, services, protocols, dependencies, and Apache-2.0 licensing, with a scoped GoreeCloud UI branding layer. This is **not** a ground-up rewrite or an official upstream OpenCloud distribution.
 
-This is the main repository of the OpenCloud server.
-It contains the golang codebase for the backend services.
+> **Status — integration in progress.** This repository is public source code, **not evidence of a deployed or production-hardened service**. The intended address is [drive.goreecloud.com](https://drive.goreecloud.com); DNS, HTTPS, persistent storage, backups, first-run setup, and live service acceptance must be verified independently. Do not use it for irreplaceable data before recovery testing.
 
-## Getting Involved
+## What it does
 
-The OpenCloud server is released under [Apache 2.0](https://github.com/opencloud-eu/opencloud/blob/main/LICENSE).
-The project is thrilled to receive contributions in all forms.
-Start hacking now, there are many ways to get involved such as:
+The inherited OpenCloud platform provides browser file management, user identity, uploads and downloads, WebDAV-compatible access, file sharing, and other services supported by the particular upstream version. Specific features, clients, and production integrations should be tested against this fork rather than assumed from the upstream roadmap.
 
-- Reporting [issues or bugs](https://github.com/opencloud-eu/opencloud/issues)
-- Requesting [features](https://github.com/opencloud-eu/opencloud/issues)
-- [Writing documentation](https://github.com/opencloud-eu/docs)
-- [Writing code or extend our tests](https://github.com/opencloud-eu/opencloud/pulls)
-- [Reviewing code](https://github.com/opencloud-eu/opencloud/pulls)
-- Helping others in the [community](https://app.element.io/#/room/#opencloud:matrix.org)
+GoreeCloud-specific work in this repository:
 
-Every contribution is meaningful and appreciated!
-Please refer to our [Contribution Guidelines](https://github.com/opencloud-eu/opencloud/blob/main/CONTRIBUTING.md) if you want to get started.
+- **GC UI-based brand theme:** GoreeCloud Drive name, slogan, light/dark semantic colors, responsive wordmark, and favicon. Design tokens are derived from [GoreeCloud UI](https://github.com/GoreeCloud/gc-ui/blob/main/tokens/gc.v1.tokens.json); visual and accessibility acceptance remains pending.
+- **Secure maintenance baseline:** documented operational guardrails, a source-level branding check, and honest release-readiness guidance.
+- **Upstream traceability:** the fork relationship, OpenCloud technical package names, original licensing, and third-party notices are preserved.
 
-## Build OpenCloud
+GoreeCloud-specific brand assets live in `services/web/assets/themes/goreecloud/assets/`. The embedded default theme is configured by `services/web/assets/themes/opencloud/theme.json`. Do not rename OpenCloud's Go module or internal service identifiers just to change the product name.
 
-To build the backend, follow these instructions:
+## Getting started — development
 
-Generate the assets needed by e.g., the web UI and the builtin IDP
+You need a supported Go/Node build toolchain and the tools referenced by the upstream Makefiles. Consult the [upstream development docs](https://docs.opencloud.eu/) for version-specific prerequisites.
 
-``` console
+```sh
 make generate
-```
-
-Then compile the `opencloud` binary
-
-``` console
 make -C opencloud build
+opencloud/bin/opencloud init
+opencloud/bin/opencloud server
 ```
-That will produce the binary `opencloud/bin/opencloud`. It can be started as a local test instance right away with a two step command:
 
-```bash
-opencloud/bin/opencloud init && opencloud/bin/opencloud server
+`init` creates local server configuration (typically under `~/.opencloud`). **Review generated credentials and configuration before any external exposure.** This developer flow alone is **not** a recommended public deployment configuration.
+
+You can alternatively build from the included upstream `Dockerfile` (build-time tooling and resources required):
+
+```sh
+docker build --pull -t goreecloud-drive:local .
 ```
-This creates a server configuration (by default in `$HOME/.opencloud`) and starts the server.
 
-For more setup- and installation options consult the [Development Documentation](https://docs.opencloud.eu/).
+Pin the source commit and resulting image digest for any release. The Dockerfile retains upstream build tooling and image metadata for provenance; an image build is not proof of runtime readiness.
 
-## Technology
+## Deploying safely
 
-Important information for contributors about the technology in use.
+For production, use [OpenCloud's maintained deployment guidance](https://docs.opencloud.eu/docs/admin/getting-started/container/docker-compose/) and adapt it **outside the application source tree** to the approved GoreeCloud host and reverse proxy. Never commit `.env` files, OIDC client secrets, tokens, passwords, TLS private keys, or backup credentials.
 
-### Authentication
+Before exposing `drive.goreecloud.com`:
 
-The OpenCloud backend authenticates users via [OpenID Connect](https://openid.net/connect/) using either an external IdP like [Keycloak](https://www.keycloak.org/) or the embedded [LibreGraph Connect](https://github.com/libregraph/lico) identity provider.
+1. Confirm intended VPS, DNS authority, TLS certificates, firewall, reverse-proxy and origin configuration. Make administrative interfaces private.
+2. Initialize a unique admin account and persistent config/data volumes with least-privilege permissions. Disable test/demo settings and insecure authentication shortcuts.
+3. Review OpenID Connect issuer, redirect URI and cookie/session security for the final HTTPS origin.
+4. Establish encrypted, access-controlled backups **and demonstrate restore** of files, identities, configuration, and encryption keys as applicable.
+5. Validate upload/download, WebDAV, sharing permissions, authorization boundaries, account recovery, restarts, storage exhaustion, logs, health checks, and rollback.
+6. Complete desktop/mobile accessibility and GC UI visual acceptance before calling the service stable.
 
-### Database
-
-The OpenCloud backend does not use a database. It stores all data in the filesystem. By default, the root directory of the backend is `$HOME/.opencloud/`.
+The planned public URL must not be interpreted as a live-service health claim.
 
 ## Security
 
-If you find a security-related issue, please contact [security@opencloud.eu](mailto:security@opencloud.eu) immediately.
+Read [SECURITY.md](SECURITY.md) for reporting and the GoreeCloud operational hardening checklist. The new source-level checks do not replace dependency scanning, SAST, container/image scanning, authentication tests, penetration testing, or a verified disaster-recovery rehearsal.
+
+If you discover a vulnerability in **the underlying OpenCloud project**, also follow the [upstream responsible disclosure guidance](https://github.com/opencloud-eu/opencloud/security). Avoid publishing an exploit or secrets in a public issue.
+
+## Development and upstream updates
+
+- **Primary branch:** `main`. Make reviewable changes on short-lived branches and check tests before merging.
+- **Upstream:** [opencloud-eu/opencloud](https://github.com/opencloud-eu/opencloud); review upstream releases, migrations, advisories, and conflicts before synchronizing.
+- **Brand authority:** [GoreeCloud UI](https://github.com/GoreeCloud/gc-ui) — shared design requirements, tokens, and acceptance evidence.
+- **Operational scope:** configuration and deployment may live in private infrastructure. This public source repository intentionally contains no production secrets.
+
+See upstream [CONTRIBUTING.md](CONTRIBUTING.md) for general code conventions; GoreeCloud-specific policy must be followed for changes in this fork.
+
+## Credits and license
+
+GoreeCloud Drive is **derived from OpenCloud, developed by the OpenCloud community**. OpenCloud and its contributors retain credit for their work. This fork is independently maintained by GoreeCloud and is not endorsed by OpenCloud GmbH. Existing copyright notices and licensing are preserved; source is distributed under the applicable [Apache License 2.0](LICENSE) and third-party licenses.
+
+Original upstream project: https://github.com/opencloud-eu/opencloud
