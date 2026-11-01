@@ -1,0 +1,17 @@
+name: GoreeCloud Drive brand integrity
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Validate theme assets and source attribution
+        run: python3 scripts/validate_drive_branding.py
