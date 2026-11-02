@@ -28,8 +28,10 @@ jobs:
         run: |
           # Official Caddy 2.11.4 linux/amd64 image; immutable manifest.
           # Offline, non-root, read-only: parsing only, no proxy start or TLS issuance.
+          # The official Caddy executable carries cap_net_bind_service=filecap;
+          # retain only that capability to permit exec (it is not used by adapt).
           docker run --rm --network none --read-only --user 10001:10001 \
-            --cap-drop ALL --security-opt no-new-privileges \
+            --cap-drop ALL --cap-add NET_BIND_SERVICE \
             --tmpfs /tmp:rw,nosuid,noexec,size=16m \
             -v "$PWD/ops/dev/Caddyfile.private.example:/etc/caddy/Caddyfile:ro" \
             --entrypoint caddy \
