@@ -28,7 +28,7 @@ Run the new **read-only** contract check from a checkout containing the IDP mani
 python3 ops/tests/test_idp_lock_contract.py
 ```
 
-Requires `PyYAML`. On the connected laptop, the test **passed** on November 1, 2026. It checks that every direct runtime/development dependency, range and resolved importer entry matches `package.json`, that the lock includes package/snapshot records, and that package-manager/lock format are as expected. It neither installs dependencies nor executes package scripts. A passing result proves **manifest/lock consistency, not vulnerability safety**.
+Requires `PyYAML`. On the connected laptop, the test **passed** on November 1, 2026. The separate `python3 ops/tests/test_idp_lock_selftest.py` also **passed**: it copies the actual manifest/lock into a disposable directory, confirms the valid case passes, deliberately changes the `axios` version requirement, and confirms that the contract rejects that mismatch. These checks touch no live IDP files. It checks that every direct runtime/development dependency, range and resolved importer entry matches `package.json`, that the lock includes package/snapshot records, and that package-manager/lock format are as expected. It neither installs dependencies nor executes package scripts. A passing result proves **manifest/lock consistency, not vulnerability safety**.
 
 The source IDP Makefile currently invokes `pnpm install` without an explicit `--frozen-lockfile`. Before promoting a dependency refresh, evaluate using frozen installs in a reviewed follow-up and verify that the actual builder/package-manager combination reproduces asset hashes and licensing output. Do not silently update framework major versions or override transitive dependencies without acceptance testing.
 
