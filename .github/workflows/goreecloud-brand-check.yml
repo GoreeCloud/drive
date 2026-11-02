@@ -15,3 +15,8 @@ jobs:
           persist-credentials: false
       - name: Validate theme assets and source attribution
         run: python3 scripts/validate_drive_branding.py
+      - name: Assert private Drive dev route remains fail-closed
+        run: |
+          if [ -f ops/dev/Caddyfile.private.example ]; then
+            python3 ops/tests/test_drive_dev_fail_closed.py
+          fi
