@@ -1,14 +1,19 @@
-# REVIEW-ONLY candidate; never insert into live Caddy without VPN/TLS verification.
-# This is a source-IP gate on a publicly bound proxy, NOT by itself a VPN boundary.
-# Public-origin requests must not reach the development backend.
+# REVIEW-ONLY, FAIL-CLOSED PLACEHOLDER — NOT APPROVED FOR LIVE CADDY.
+# This intentionally has NO upstream route, NO source-IP VPN shortcut,
+# and NO implied proof of private ingress, peer authorization or DNS.
+#
+# Before proposing an active reverse_proxy route, independently verify:
+# 1. An authenticated, authorized NetBird/GoreeCloud VPN gateway peer.
+# 2. A private VPN-only listener/firewall/peer ACL (not remote_ip 100.64/10).
+# 3. A private AdGuard Home/GoreeCloud DNS rewrite to the VERIFIED VPN address.
+# 4. TLS trust and host validation from an approved VPN client.
+# 5. Isolated dev credentials, storage, backups and recovery acceptance.
+#
+# Even if accidentally loaded on a shared public Caddy listener, this
+# placeholder MUST NOT proxy any request to the development backend.
+# 'tls internal' is illustrative; it does not validate CA trust or
+# authorize use on the live gateway.
 drive-dev.goreecloud.com {
     tls internal
-    encode zstd gzip
-    @vpn_peer remote_ip 100.64.0.0/10
-    handle @vpn_peer {
-        reverse_proxy goreecloud-drive-dev:9200
-    }
-    handle {
-        respond "Not Found" 404
-    }
+    respond "Development environment unavailable" 404
 }
