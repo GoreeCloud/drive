@@ -10,6 +10,10 @@
 - `../tests/test_archive_metadata.py` — **synthetic only** metadata round-trip test.
 - `../tests/test_env_contract.py` — source-level validation of these example variable names and security flags.
 
+## Repository security-monitoring snapshot (November 1, 2026)
+
+Authenticated repository settings showed GitHub secret scanning and push protection **enabled**, while Dependabot security updates **disabled**. The Dependabot alerts API reported that alerts are disabled for this repository; no dependency-vulnerability triage could be verified through that facility. These settings may change later. A source or container build is not a substitute for vulnerability assessment, and the production release checklist must account for this gap. Do not claim dependency alerts or security updates are active until confirmed in the repository's current settings.
+
 ## Operator prerequisites and hold points
 
 1. Verify the source checkout revision, image build exit code, image OCI labels and applicable vulnerability analysis. Build from the branded production branch rather than silently using an upstream image.
