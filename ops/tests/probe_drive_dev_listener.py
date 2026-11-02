@@ -66,6 +66,11 @@ def evaluate_interface(ip_json: str, expected_ip: str) -> list[str]:
                if isinstance(item, dict) and item.get("ifname") == "wt0"]
     if len(matches) != 1:
         return ["netbird_wt0_not_unique_or_missing"]
+    # A configured address on an administratively or carrier-down tunnel is
+    # not a usable private ingress interface. Fail closed on missing flags.
+    flags = matches[0].get("flags")
+    if not isinstance(flags, list) or not {"UP", "LOWER_UP"}.issubset(flags):
+        return ["netbird_wt0_not_operational"]
     addresses = matches[0].get("addr_info", [])
     if not isinstance(addresses, list) or not any(
         isinstance(item, dict) and item.get("family") == "inet"
@@ -92,11 +97,17 @@ def self_test() -> None:
     for index, (raw, ip, candidate_port) in enumerate(bad, 1):
         assert evaluate(raw, ip, candidate_port), "unsafe listener regression " + str(index)
     good_interface = json.dumps([{
-        "ifname": "wt0", "addr_info": [
+        "ifname": "wt0", "flags": ["POINTOPOINT", "UP", "LOWER_UP"], "addr_info": [
             {"family": "inet", "local": "100.71.27.119", "prefixlen": 16}]
     }])
     assert evaluate_interface(good_interface, "100.71.27.119") == []
     invalid_interfaces = [
+        json.dumps([{"ifname": "wt0", "flags": ["UP"], "addr_info": [
+            {"family": "inet", "local": "100.71.27.119"}]}]),
+        json.dumps([{"ifname": "wt0", "flags": ["LOWER_UP"], "addr_info": [
+            {"family": "inet", "local": "100.71.27.119"}]}]),
+        json.dumps([{"ifname": "wt0", "addr_info": [
+            {"family": "inet", "local": "100.71.27.119"}]}]),
         "not-json",
         "{}",
         "[]",
@@ -113,7 +124,7 @@ def self_test() -> None:
     for index, raw in enumerate(invalid_interfaces, 1):
         assert evaluate_interface(raw, "100.71.27.119"), (
             "unsafe VPN-interface regression " + str(index))
-    print("PASS: nine unsafe socket and seven unsafe wt0-interface regressions")
+    print("PASS: nine unsafe socket and ten unsafe wt0-interface regressions")
 
 
 def main() -> int:
