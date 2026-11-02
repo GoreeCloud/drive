@@ -1,0 +1,37 @@
+# GoreeCloud Drive — upstream security advisories and release evidence
+
+Evidence date: 2026-11-01. **This is a targeted advisory review, not a complete SCA, SAST, vulnerability, runtime or penetration test.** The release remains blocked from public operation until its security and recovery gates are met.
+
+## Exact source and dependency provenance
+
+- GitHub fork: `GoreeCloud/drive`, branch `release/goreecloud-7.2.4`, derived from official OpenCloud `v7.2.4` upstream commit `1770793f2657e153836c32d32dd6d256b8531d3d`.
+- Official [v7.2.4 release notes](https://github.com/opencloud-eu/opencloud/releases/tag/v7.2.4) classify this as a **production release**, dated August 21, 2026.
+- Official [v9.0.0 release notes](https://github.com/opencloud-eu/opencloud/releases/tag/v9.0.0), October 27, 2026, classify that as **rolling**, not a superseding stable production release.
+- Source `go.mod` at `v7.2.4` specifies `github.com/opencloud-eu/reva/v2 v2.46.8`. This check concerns declared source modules. A compiled binary's exact bill of materials has not been independently verified.
+
+## Targeted upstream advisories
+
+| Advisory | Severity | Fix threshold in upstream advisory | Assessment for v7.2.4 |
+| --- | --- | --- | --- |
+| [GHSA-vf5j-r2hw-2hrw](https://github.com/opencloud-eu/opencloud/security/advisories/GHSA-vf5j-r2hw-2hrw) — Public Link Exploit | High (CVSS 8.2) | Stable 4.0.3 or rolling 5.0.2; underlying Reva [GHSA-9j2f-3rj3-wgpg](https://github.com/opencloud-eu/reva/security/advisories/GHSA-9j2f-3rj3-wgpg) fixed at 2.40.3 / 2.42.3 | **Above the published fixed versions**; declared Reva version is 2.46.8. No exploit reproduction or binary-level validation was performed. |
+| [GHSA-gf4p-7p27-26w7](https://github.com/opencloud-eu/opencloud/security/advisories/GHSA-gf4p-7p27-26w7) — Access to internal metadata | Moderate (CVSS 6.3) | Stable 4.0.8 or 7.2.0 | **Above the published fixed version**; no runtime or exploit validation was performed. |
+
+These two advisories are the **published upstream repository advisories found during this bounded review**. Their fix thresholds do not establish that newer dependencies are vulnerability-free or that no other advisories exist for transitive packages, operating-system libraries, container base images, Web client dependencies, or the fork's implementation.
+
+## Repository and build coverage gaps
+
+- GoreeCloud's GitHub repository secret scanning and push protection were enabled when last checked; GitHub Dependabot **security updates were disabled**, and the Dependabot alerts API reported that alerts were disabled. Recheck current settings before claiming continuous vulnerability monitoring.
+- The production-track custom image is `goreecloud-drive:7.2.4-gc1`, built locally and branded, but reports a self-compiled `dev` edition metadata channel. It is not a vendor-certified release image.
+- Vulnerability scanning with `govulncheck`, Trivy, Grype or an equivalent approved tool **has not been completed**. Tool presence was checked; the relevant scanners were absent. Do not report a clean vulnerability scan.
+- GitHub's current brand integrity CI and targeted Go tests are useful but are **not** substitutes for a source/dependency/container scanner, functional security tests or a verified backup restore.
+- Public-link password-required configuration is staged and verified against release source annotations. Requiring passwords does **not** disable public-link creation or prove the security of the sharing mechanism.
+
+## Exit criteria
+
+1. Evaluate and remediate applicable *current* OpenCloud and Reva upstream security advisories, Go module vulnerabilities, Node/web frontend dependencies and the built Alpine container filesystem.
+2. Check the actual production image digest and bill of materials rather than assuming it matches an upstream artifact.
+3. Run appropriate source and dependency/container scans using trusted, reviewed scanners, recording versions, findings, accepted risks and remediations.
+4. Validate authentication/authorization and link-sharing behavior privately before allowing the public hostname. Preserve upstream licensing and attribution.
+5. Record a new review when the upstream production release changes; avoid silently replacing the validated source with a rolling release.
+
+**Current disposition:** The two specific published vulnerabilities above have patch thresholds predating v7.2.4; broader vulnerability posture remains **unverified**. Not ready for public release.
