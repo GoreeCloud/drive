@@ -6,6 +6,14 @@ GoreeCloud Drive is the GoreeCloud-maintained **fork of [OpenCloud](https://gith
 
 > **Status — integration in progress.** This repository is public source code, **not evidence of a deployed or production-hardened service**. The intended address is [drive.goreecloud.com](https://drive.goreecloud.com); DNS, HTTPS, persistent storage, backups, first-run setup, and live service acceptance must be verified independently. Do not use it for irreplaceable data before recovery testing.
 
+## Release tracks and deployment status
+
+- **`main`** tracks a newer OpenCloud rolling/development source line. A successful build of this branch is not a production approval.
+- **[`release/goreecloud-7.2.4`](https://github.com/GoreeCloud/drive/tree/release/goreecloud-7.2.4)** starts from the upstream OpenCloud v7.2.4 production-track release, with scoped GoreeCloud UI modifications and independent build/static test evidence. It is a **candidate**, not an operationally certified deployment.
+- The production-branch [deployment template](https://github.com/GoreeCloud/drive/blob/release/goreecloud-7.2.4/ops/deploy/README.md) and [backup/restore acceptance gates](https://github.com/GoreeCloud/drive/blob/release/goreecloud-7.2.4/ops/BACKUP-RESTORE.md) document the remaining operational requirements.
+
+As last verified on November 1, 2026, `drive.goreecloud.com` resolved in DNS but did not complete TLS, and no GoreeCloud Drive container was running. **Do not infer current live availability from this historical release note.** Check the service independently before declaring it online.
+
 ## What it does
 
 The inherited OpenCloud platform provides browser file management, user identity, uploads and downloads, WebDAV-compatible access, file sharing, and other services supported by the particular upstream version. Specific features, clients, and production integrations should be tested against this fork rather than assumed from the upstream roadmap.
