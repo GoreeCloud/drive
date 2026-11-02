@@ -1,0 +1,41 @@
+# GoreeCloud Drive production-track candidate (OpenCloud 7.2.4 base).
+# Requires a locally built, revision-verified image, initialized persistent config,
+# an authorized reverse proxy and a tested encrypted off-host backup.
+# Intentionally does not publish any host port.
+name: goreecloud-drive
+services:
+  drive:
+    image: goreecloud-drive:7.2.4-gc1
+    pull_policy: never
+    container_name: goreecloud-drive
+    hostname: goreecloud-drive
+    user: "1001:1001"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 2g
+    cpus: 2
+    stop_grace_period: 30s
+    tmpfs:
+      - /tmp:rw,nosuid,noexec,size=64m
+    env_file:
+      - .env.runtime
+    volumes:
+      - ./config:/etc/opencloud
+      - ./data:/var/lib/opencloud
+    networks:
+      - proxy
+    logging:
+      driver: local
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--show-error", "http://127.0.0.1:9200/"]
+      interval: 30s
+      timeout: 8s
+      retries: 3
+      start_period: 90s
+networks:
+  proxy:
+    external: true
