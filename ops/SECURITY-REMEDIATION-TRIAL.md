@@ -22,6 +22,13 @@ This branch changes only dependency manifests and their matching vendored Go sou
 - **Narrower import-graph evidence:** The Go 1.27.3 laptop completed `go list -deps -tags=disable_crypt ./opencloud/cmd/opencloud` with vendor mode, listing **2,373 packages** and no `golang.org/x/crypto/openpgp` package path. **This excludes `enable_vips` and is not an authoritative production binary import/reachability verdict.**
 - **Binary-scan constraint:** A remote action to export the patched binary from the image was blocked by platform safety controls; it was not bypassed. Production-tag source-level `govulncheck` using the pinned Go 1.26/native-libvips build environment is a separate permitted check, but cannot replace an actual binary-level verdict.
 
+## Identity-provider frontend gate — partial automated coverage
+
+- `ops/tests/test_idp_lock_contract.py` verified the IDP's pinned `pnpm@11.1.3` manifest/lock contract: 20 runtime and 30 development direct dependencies, 1,134 lock package records and snapshots, and five existing overrides. **PASS** on the authorized laptop using PyYAML.
+- `ops/tests/test_idp_lock_selftest.py` verified failure detection for a deliberately mismatched `axios` version requirement using disposable copies. **PASS** on the laptop. No live files, packages or services were modified.
+- A package-manager vulnerability audit did **not** complete. The bundled pnpm 10 CLI initially attempted to switch to pnpm 11 in a noexec temporary directory. A subsequent remote command was explicitly safety-blocked and was not bypassed. **Do not report an IDP vulnerability-scan verdict.**
+- Full evidence and separate acceptance conditions are in [`ops/FRONTEND-DEPENDENCIES.md`](FRONTEND-DEPENDENCIES.md). These lockfile tests are manually verified; they have **not** been added to the repository's branding-only GitHub Actions workflow.
+
 ## Mandatory gates before promotion
 
 1. Review every dependency and vendored code diff for compatibility, licensing, security and unexpected transitive changes. Treat upstream modules and tools as untrusted until verified.
