@@ -54,6 +54,8 @@ The scanner returned **35 module-level advisories across 13 modules** (nonzero e
 
 **Triage order:** (1) network-exposed gRPC and HTTP/2 memory, parser and authorization defects; (2) file/image parsing and archive handling; (3) cryptography, SSH and Git-related consumers; (4) telemetry/logging and ancillary integrations; (5) unchanged Alpine/Node/frontend dependencies. First verify reachability and binary/module versions. Do not bulk-upgrade the stable fork's vendor packages or replace it with the rolling upstream release without compatibility tests, a new build, regression testing and a rollback plan.
 
+**Verified patch compatibility constraint:** The current staged production Dockerfile builds with `quay.io/opencloudeu/golang-ci:1.25`. Downloaded official module manifests for selected fixed versions report `golang.org/x/net@v0.62.0` **requires Go 1.26.0**, and `golang.org/x/crypto@v0.56.0` **requires Go 1.26.0**. In contrast `golang.org/x/text@v0.41.0` and `google.golang.org/grpc@v1.83.1` declare **Go 1.25.0**. These are module `go` directives, not evidence the patched application builds or works. Any comprehensive remediation must evaluate a reviewed Go toolchain/base-image upgrade plus vendor/release compatibility rather than blindly updating module versions while retaining the 1.25 build image. The official Go module checksum verification (`go mod verify`) passed on the clean checkout; that checks module integrity, **not absence of vulnerabilities**.
+
 **Tracking:** GitHub Issues are disabled for `GoreeCloud/drive` (GitHub returned HTTP 410), so these results must also be tracked in the existing authorized Todoist deployment task. No issue was created.
 
 ## Exit criteria
