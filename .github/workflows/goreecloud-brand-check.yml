@@ -29,6 +29,7 @@ jobs:
           # Self-test only: never query private DNS from public CI runners.
           python3 ops/tests/probe_drive_dev_private_dns.py --self-test
           python3 ops/tests/probe_drive_dev_netbird_path.py --self-test
+          python3 ops/tests/probe_drive_dev_netbird_peer.py --self-test
       - name: Verify parsed Caddy policy is strictly 404-only
         run: |
           # Official Caddy 2.11.4 linux/amd64 image; immutable manifest.
