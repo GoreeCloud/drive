@@ -7,12 +7,26 @@
 - `compose.yaml` — a non-root, read-only, resource-bounded service using relative persistent config/data directories and an externally managed `proxy` network. It publishes **no** host port and does not provision Caddy or TLS.
 - `env.runtime.example` — non-secret environment defaults verified against the source configuration annotations. The sample uses `drive.goreecloud.com`; customize this to the approved origin before any use. Copy privately to `.env.runtime`; do not commit that runtime file.
 - `../BACKUP-RESTORE.md` — backup, metadata and restore acceptance protocol.
+- `../monitor_storage.py` — read-only, machine-readable disk/inode headroom check, not a scheduler or quota.
+- `../SECURITY-ADVISORIES.md` — targeted upstream advisory review and outstanding dependency/container scanning coverage.
 - `../tests/test_archive_metadata.py` — **synthetic only** metadata round-trip test.
 - `../tests/test_env_contract.py` — source-level validation of these example variable names and security flags.
 
 ## Repository security-monitoring snapshot (November 1, 2026)
 
 Authenticated repository settings showed GitHub secret scanning and push protection **enabled**, while Dependabot security updates **disabled**. The Dependabot alerts API reported that alerts are disabled for this repository; no dependency-vulnerability triage could be verified through that facility. These settings may change later. A source or container build is not a substitute for vulnerability assessment, and the production release checklist must account for this gap. Do not claim dependency alerts or security updates are active until confirmed in the repository's current settings.
+
+## Read-only storage headroom check
+
+On a compatible Linux host with the *actual* persistent Drive data directory present, run:
+
+```sh
+python3 ops/monitor_storage.py --path /path/to/goreecloud-drive/data
+```
+
+Defaults are a minimum **20 GiB free**, **20% free filesystem space**, and **10% free inodes**. It prints one JSON object, returns exit code `0` for PASS, `2` for CRITICAL, and `3` for a filesystem error. It warns if the data directory shares the OS filesystem. A deliberate high threshold should produce `CRITICAL` when exercising negative-path tests.
+
+**This is an on-demand check only.** Do not claim alerts are actively sent or quotas are enforced until a secured, authorized monitoring scheduler/receiver and capacity controls are configured and tested. Disk usage can change immediately after a check. The absolute/free-percent thresholds are temporary safeguards, not a substitute for capacity planning.
 
 ## Operator prerequisites and hold points
 
