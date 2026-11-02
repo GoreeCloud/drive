@@ -58,6 +58,26 @@ The scanner returned **35 module-level advisories across 13 modules** (nonzero e
 
 **Tracking:** GitHub Issues are disabled for `GoreeCloud/drive` (GitHub returned HTTP 410), so these results must also be tracked in the existing authorized Todoist deployment task. No issue was created.
 
+## Isolated dependency remediation trial — not built or deployed (November 1, 2026)
+
+A **separate, local-only Git worktree** was created from the release branch at `e9d65b017da9d13a7a61037b73892de51ab57195`. No production image, VPS runtime, `main`, or release-branch dependency source was changed in this experiment.
+
+Official `govulncheck v1.9.0` module scans reported a reproducible reduction as patch groups were introduced with `GOFLAGS=-mod=mod`:
+
+| Trial stage | Module-level advisory count | Targeted Go configuration / initialization tests |
+| --- | ---: | --- |
+| Unmodified 7.2.4 candidate | 35 | Previously passed |
+| Upgrade `x/net`, `x/crypto`, `x/text`, gRPC | 19 | Passed |
+| Upgrade `x/image`, go-git, compress, chi | 6 | Passed |
+| Upgrade OpenTelemetry exporters/SDK, etcd, gRPC patch | 3 | Passed |
+| Upgrade lego ACME library from v4.4.0 to v4.34.0 | **1** | Passed |
+
+The remaining finding is [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) for the unmaintained `golang.org/x/crypto/openpgp` package; there is **no fixed module version**. Direct application-source import searches did not identify a reference to `openpgp`, and the original binary did not contain that exact package path as a printable string. **Neither observation proves absence of reachable vulnerable code; an authoritative production-tag symbol/binary scan is still required.**
+
+A separate **network-disabled inspection** of the original `goreecloud-drive:7.2.4-gc1` Docker image's executable confirmed that all 13 modules reported by the original module scan are embedded at the reported affected versions. Its binary source revision remains `e721728a163417961a0b3b28c3c26ec85fef273e`. The experiment has **not** replaced that image.
+
+**Constraints and acceptance:** The trial's `go.mod` directive advances to Go 1.26, while the VPS image's verified builder is `quay.io/opencloudeu/golang-ci:1.25`. Existing `vendor/` dependency copies must be regenerated and validated before a production build is even possible. The targeted tests were run on a connected laptop using Go 1.27.3 with `-mod=mod`, not with the existing vendored image build process; a complete Go/web build, real native `libvips`, source/binary vulnerability scan, functional integration tests, image SBOM and deployment acceptance have **not** passed. The trial remains **unreviewed and not suitable for production**. Do not merge these manifest changes without proving vendor/toolchain compatibility and reviewing transitive dependencies.
+
 ## Exit criteria
 
 1. Evaluate and remediate applicable *current* OpenCloud and Reva upstream security advisories, Go module vulnerabilities, Node/web frontend dependencies and the built Alpine container filesystem.
