@@ -1,0 +1,29 @@
+# GoreeCloud Drive experimental security trial, digest-pinned base images (amd64).
+# App Go source from reviewed security dependency commit 6a34b6f88030ebb57bec5a3df6c3e71755fcfbd8.
+# Base IMAGE digests are pinned; 'apk add' package versions remain unpinned.
+FROM quay.io/opencloudeu/nodejs-ci@sha256:96a3373ba9bb3d37e413b84fee9d31861b11d40079003f982b9de3e8e50a3dc1 AS generate
+COPY ./ /opencloud/
+WORKDIR /opencloud/opencloud
+RUN make node-generate-prod
+
+FROM quay.io/opencloudeu/golang-ci@sha256:620c7a90212b46c4aa90e64ce6ed5cbb8934ccabc056d6bfd6bb2683f3f1d1e4 AS build
+ENV GOMAXPROCS=2 GOFLAGS="-p=2"
+COPY --from=generate /opencloud /opencloud
+WORKDIR /opencloud/opencloud
+RUN make go-generate build ENABLE_VIPS=true EDITION=dev
+
+FROM alpine@sha256:c26612752c78b18faacd63c7d50f4592c2e7b0f25e0e20e82bd74e465c57ab0d
+RUN apk add --no-cache attr ca-certificates curl mailcap tree vips && echo 'hosts: files dns' > /etc/nsswitch.conf
+LABEL org.opencontainers.image.title="GoreeCloud Drive SECURITY TRIAL" \
+      org.opencontainers.image.vendor="GoreeCloud" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/GoreeCloud/drive" \
+      org.opencontainers.image.revision="6a34b6f88030ebb57bec5a3df6c3e71755fcfbd8" \
+      org.opencontainers.image.ref.name="security/goreecloud-7.2.4-vuln-trial" \
+      org.opencontainers.image.version="7.2.4-gc1-security-trial3" \
+      org.opencontainers.image.base.version="v7.2.4" \
+      org.opencontainers.image.base.revision="1770793f2657e153836c32d32dd6d256b8531d3d" \
+      goreecloud.release.approved="false"
+ENTRYPOINT ["/usr/bin/opencloud"]
+CMD ["server"]
+COPY --from=build /opencloud/opencloud/bin/opencloud /usr/bin/opencloud
