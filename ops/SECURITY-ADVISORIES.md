@@ -60,7 +60,7 @@ The scanner returned **35 module-level advisories across 13 modules** (nonzero e
 
 ## Isolated dependency remediation trial — not built or deployed (November 1, 2026)
 
-A **separate, local-only Git worktree** was created from the release branch at `e9d65b017da9d13a7a61037b73892de51ab57195`. No production image, VPS runtime, `main`, or release-branch dependency source was changed in this experiment.
+A **separate experimental Git worktree**, based on release revision `e9d65b017da9d13a7a61037b73892de51ab57195`, has now been preserved as a [review-only security branch](https://github.com/GoreeCloud/drive/tree/security/goreecloud-7.2.4-vuln-trial) at commit `6a34b6f88030ebb57bec5a3df6c3e71755fcfbd8`. The branch includes `go.mod`, `go.sum`, regenerated `vendor/`, and an explicit non-production review note. No production image, VPS runtime, `main`, or release-branch dependency source was changed. GitHub's private-email push restriction was respected using the authenticated account's no-reply commit identity; privacy settings were not weakened.
 
 Official `govulncheck v1.9.0` module scans reported a reproducible reduction as patch groups were introduced with `GOFLAGS=-mod=mod`:
 
@@ -76,7 +76,7 @@ The remaining finding is [GO-2026-5932](https://pkg.go.dev/vuln/GO-2026-5932) fo
 
 A separate **network-disabled inspection** of the original `goreecloud-drive:7.2.4-gc1` Docker image's executable confirmed that all 13 modules reported by the original module scan are embedded at the reported affected versions. Its binary source revision remains `e721728a163417961a0b3b28c3c26ec85fef273e`. The experiment has **not** replaced that image.
 
-**Constraints and acceptance:** The trial's `go.mod` directive advances to Go 1.26, while the VPS image's verified builder is `quay.io/opencloudeu/golang-ci:1.25`. Existing `vendor/` dependency copies must be regenerated and validated before a production build is even possible. The targeted tests were run on a connected laptop using Go 1.27.3 with `-mod=mod`, not with the existing vendored image build process; a complete Go/web build, real native `libvips`, source/binary vulnerability scan, functional integration tests, image SBOM and deployment acceptance have **not** passed. The trial remains **unreviewed and not suitable for production**. Do not merge these manifest changes without proving vendor/toolchain compatibility and reviewing transitive dependencies.
+**Constraints and acceptance:** The trial's `go.mod` directive advances to Go 1.26, while the VPS image's verified builder is `quay.io/opencloudeu/golang-ci:1.25`. Regeneration of `vendor/` with `go mod vendor` **succeeded**, and the targeted tests **passed again in default vendor mode**, alongside scoped `go vet`, `go mod verify` and `git diff --check` for the module manifests on a laptop running Go 1.27.3. A full-tree whitespace check flagged whitespace in updated third-party vendor README text; its upstream wording was not changed to suppress the warning. A complete Go/web build with real native `libvips` and a vetted Go 1.26+ builder, production-tag symbol/binary vulnerability scan, functional integration tests, image SBOM, backup restore and deployment acceptance have **not** passed. The review branch remains **unreviewed and not suitable for production**. Do not merge its dependency changes without proving release-toolchain compatibility and reviewing transitive changes.
 
 ## Exit criteria
 
