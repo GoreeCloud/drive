@@ -28,7 +28,7 @@ This branch changes only dependency manifests and their matching vendored Go sou
 - `ops/tests/test_idp_lock_contract.py` verified the IDP's pinned `pnpm@11.1.3` manifest/lock contract: 20 runtime and 30 development direct dependencies, 1,134 lock package records and snapshots, and five existing overrides. **PASS** on the authorized laptop using PyYAML.
 - `ops/tests/test_idp_lock_selftest.py` verified failure detection for a deliberately mismatched `axios` version requirement using disposable copies. **PASS** on the laptop. No live files, packages or services were modified.
 - A package-manager vulnerability audit did **not** complete. The bundled pnpm 10 CLI initially attempted to switch to pnpm 11 in a noexec temporary directory. A subsequent remote command was explicitly safety-blocked and was not bypassed. **Do not report an IDP vulnerability-scan verdict.**
-- Full evidence and separate acceptance conditions are in [`ops/FRONTEND-DEPENDENCIES.md`](FRONTEND-DEPENDENCIES.md). These lockfile tests are manually verified; they have **not** been added to the repository's branding-only GitHub Actions workflow.
+- Full evidence and separate acceptance conditions are in [`ops/FRONTEND-DEPENDENCIES.md`](FRONTEND-DEPENDENCIES.md). These lockfile tests were manually verified on the authorized laptop and, as of November 2, are also enforced on draft PR #3 by the existing GitHub Actions workflow. The [first passing CI run](https://github.com/GoreeCloud/drive/actions/runs/41441712751) independently confirmed both the manifest/lock contract and synthetic drift rejection with pinned `PyYAML==6.0.3` in an ephemeral venv. This does **not** provide a pnpm advisory audit, binary reachability verdict, or release clearance.
 
 ## Mandatory gates before promotion
 
