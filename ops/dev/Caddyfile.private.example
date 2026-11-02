@@ -1,0 +1,14 @@
+# REVIEW-ONLY candidate; never insert into live Caddy without VPN/TLS verification.
+# This is a source-IP gate on a publicly bound proxy, NOT by itself a VPN boundary.
+# Public-origin requests must not reach the development backend.
+drive-dev.goreecloud.com {
+    tls internal
+    encode zstd gzip
+    @vpn_peer remote_ip 100.64.0.0/10
+    handle @vpn_peer {
+        reverse_proxy goreecloud-drive-dev:9200
+    }
+    handle {
+        respond "Not Found" 404
+    }
+}
