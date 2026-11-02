@@ -1,0 +1,32 @@
+# Non-production GoreeCloud Drive security trial build only.
+# Tested against source commit 6a34b6f88030ebb57bec5a3df6c3e71755fcfbd8.
+# This build neither deploys nor initializes OpenCloud.
+# Explicit EDITION=dev is required to avoid misleading empty-edition CLI warnings.
+# Node.js builder tag is NOT digest-pinned; full reproducibility is not claimed.
+FROM quay.io/opencloudeu/nodejs-ci:24 AS generate
+COPY ./ /opencloud/
+WORKDIR /opencloud/opencloud
+RUN make node-generate-prod
+
+# Official upstream OpenCloud Go 1.26 CI builder, pinned to amd64 manifest.
+FROM quay.io/opencloudeu/golang-ci@sha256:620c7a90212b46c4aa90e64ce6ed5cbb8934ccabc056d6bfd6bb2683f3f1d1e4 AS build
+ENV GOMAXPROCS=2 GOFLAGS="-p=2"
+COPY --from=generate /opencloud /opencloud
+WORKDIR /opencloud/opencloud
+RUN make go-generate build ENABLE_VIPS=true EDITION=dev
+
+FROM alpine:3.24
+RUN apk add --no-cache attr ca-certificates curl mailcap tree vips && echo 'hosts: files dns' > /etc/nsswitch.conf
+LABEL org.opencontainers.image.title="GoreeCloud Drive SECURITY TRIAL" \
+      org.opencontainers.image.vendor="GoreeCloud" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.source="https://github.com/GoreeCloud/drive" \
+      org.opencontainers.image.revision="6a34b6f88030ebb57bec5a3df6c3e71755fcfbd8" \
+      org.opencontainers.image.ref.name="security/goreecloud-7.2.4-vuln-trial" \
+      org.opencontainers.image.version="7.2.4-gc1-security-trial2" \
+      org.opencontainers.image.base.version="v7.2.4" \
+      org.opencontainers.image.base.revision="1770793f2657e153836c32d32dd6d256b8531d3d" \
+      goreecloud.release.approved="false"
+ENTRYPOINT ["/usr/bin/opencloud"]
+CMD ["server"]
+COPY --from=build /opencloud/opencloud/bin/opencloud /usr/bin/opencloud

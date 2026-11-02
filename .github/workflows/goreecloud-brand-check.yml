@@ -15,3 +15,11 @@ jobs:
           persist-credentials: false
       - name: Validate theme assets and source attribution
         run: python3 scripts/validate_drive_branding.py
+      - name: Validate IDP lock contract and synthetic drift detection (PR 3)
+        if: github.event_name == 'pull_request' && (github.event.pull_request.number == 3 || github.head_ref == 'security/goreecloud-7.2.4-vuln-trial')
+        run: |
+          # Read-only checks; no pnpm install, build, or vulnerability-clearance claim.
+          python3 -m venv "$RUNNER_TEMP/gc-idp-contract-venv"
+          "$RUNNER_TEMP/gc-idp-contract-venv/bin/python" -m pip install --disable-pip-version-check --no-input --no-deps --only-binary=:all: --no-cache-dir 'PyYAML==6.0.3'
+          "$RUNNER_TEMP/gc-idp-contract-venv/bin/python" ops/tests/test_idp_lock_contract.py
+          "$RUNNER_TEMP/gc-idp-contract-venv/bin/python" ops/tests/test_idp_lock_selftest.py
