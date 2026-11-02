@@ -24,6 +24,20 @@ jobs:
             exit 1
           fi
           python3 ops/tests/test_drive_dev_fail_closed.py
+      - name: Verify parsed Caddy policy is strictly 404-only
+        run: |
+          # Official Caddy 2.11.4 linux/amd64 image; immutable manifest.
+          # Offline, non-root, read-only: parsing only, no proxy start or TLS issuance.
+          docker run --rm --network none --read-only --user 10001:10001 \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --tmpfs /tmp:rw,nosuid,noexec,size=16m \
+            -v "$PWD/ops/dev/Caddyfile.private.example:/etc/caddy/Caddyfile:ro" \
+            --entrypoint caddy \
+            caddy@sha256:040e9f7480b80b6d4a7e5013a21159b950a63dcbdb956e38abe2387fb28d9ec0 \
+            adapt --config /etc/caddy/Caddyfile --adapter caddyfile \
+            > "$RUNNER_TEMP/drive-dev-caddy-adapted.json"
+          python3 ops/tests/test_drive_dev_adapted_policy.py --self-test
+          python3 ops/tests/test_drive_dev_adapted_policy.py "$RUNNER_TEMP/drive-dev-caddy-adapted.json"
       - name: Validate inherited IDP lock contract and synthetic drift detection
         run: |
           # Read-only dependency integrity tests, not a vulnerability verdict.
