@@ -6,6 +6,54 @@ on:
 permissions:
   contents: read
 jobs:
+  private_dev_guard:
+    # Keep PR #4's private-route and inherited IDP checks separate from the
+    # security PR #3 additions to the existing validate job. This prevents
+    # overlapping workflow edits on the dependent draft branch.
+    if: github.event_name == 'pull_request' && (github.event.pull_request.number == 4 || github.head_ref == 'dev/drive-dev-private')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Require private Drive dev placeholder and fail-closed validator
+        run: |
+          if [ ! -f ops/dev/Caddyfile.private.example ] || [ ! -f ops/tests/test_drive_dev_fail_closed.py ]; then
+            echo "FAIL: private Drive dev placeholder or validator is missing"
+            exit 1
+          fi
+          python3 ops/tests/test_drive_dev_fail_closed.py
+      - name: Exercise private DNS preflight safely offline
+        run: |
+          # Self-test only: never query private DNS from public CI runners.
+          python3 ops/tests/probe_drive_dev_private_dns.py --self-test
+          python3 ops/tests/probe_drive_dev_netbird_path.py --self-test
+          python3 ops/tests/probe_drive_dev_netbird_peer.py --self-test
+          python3 ops/tests/probe_drive_dev_listener.py --self-test
+      - name: Verify parsed Caddy policy is strictly 404-only
+        run: |
+          # Official Caddy 2.11.4 linux/amd64 image; immutable manifest.
+          # Offline, non-root, read-only: parsing only, no proxy start or TLS issuance.
+          # The official Caddy executable carries cap_net_bind_service=filecap;
+          # retain only that capability to permit exec (it is not used by adapt).
+          docker run --rm --network none --read-only --user 10001:10001 \
+            --cap-drop ALL --cap-add NET_BIND_SERVICE \
+            --tmpfs /tmp:rw,nosuid,noexec,size=16m \
+            -v "$PWD/ops/dev/Caddyfile.private.example:/etc/caddy/Caddyfile:ro" \
+            --entrypoint caddy \
+            caddy@sha256:040e9f7480b80b6d4a7e5013a21159b950a63dcbdb956e38abe2387fb28d9ec0 \
+            adapt --config /etc/caddy/Caddyfile --adapter caddyfile \
+            > "$RUNNER_TEMP/drive-dev-caddy-adapted.json"
+          python3 ops/tests/test_drive_dev_adapted_policy.py --self-test
+          python3 ops/tests/test_drive_dev_adapted_policy.py "$RUNNER_TEMP/drive-dev-caddy-adapted.json"
+      - name: Validate inherited IDP lock contract and synthetic drift detection
+        run: |
+          # Read-only dependency integrity tests, not a vulnerability verdict.
+          python3 -m venv "$RUNNER_TEMP/gc-idp-contract-venv"
+          "$RUNNER_TEMP/gc-idp-contract-venv/bin/python" -m pip install --disable-pip-version-check --no-input --no-deps --only-binary=:all: --no-cache-dir 'PyYAML==6.0.3'
+          "$RUNNER_TEMP/gc-idp-contract-venv/bin/python" ops/tests/test_idp_lock_contract.py
+          "$RUNNER_TEMP/gc-idp-contract-venv/bin/python" ops/tests/test_idp_lock_selftest.py
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 5
