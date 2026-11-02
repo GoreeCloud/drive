@@ -14,6 +14,6 @@
 # 'tls internal' is illustrative; it does not validate CA trust or
 # authorize use on the live gateway.
 drive-dev.goreecloud.com {
-    tls internal
-    respond "Development environment unavailable" 404
+	tls internal
+	respond "Development environment unavailable" 404
 }
