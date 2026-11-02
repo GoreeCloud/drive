@@ -9,6 +9,15 @@ GoreeCloud Drive is the GoreeCloud-maintained **fork of [OpenCloud](https://gith
 
 > **Status — integration in progress.** This repository is public source code, **not evidence of a deployed or production-hardened service**. The intended address is [drive.goreecloud.com](https://drive.goreecloud.com); DNS, HTTPS, persistent storage, backups, first-run setup, and live service acceptance must be verified independently. Do not use it for irreplaceable data before recovery testing.
 
+## Release deployment resources
+
+The source has been built for an isolated VPS candidate, but the application remains **uninitialized and not publicly operational** as last verified November 1, 2026. Do not mistake the source build or branding CI for production acceptance.
+
+- [Guarded Compose template and operations instructions](ops/deploy/README.md)
+- [Encrypted backup and isolated restore requirements](ops/BACKUP-RESTORE.md)
+- [Synthetic archive metadata round-trip test](ops/tests/test_archive_metadata.py)
+- [Source-validated runtime configuration contract](ops/tests/test_env_contract.py)
+
 ## What it does
 
 The inherited OpenCloud platform provides browser file management, user identity, uploads and downloads, WebDAV-compatible access, file sharing, and other services supported by the particular upstream version. Specific features, clients, and production integrations should be tested against this fork rather than assumed from the upstream roadmap.
