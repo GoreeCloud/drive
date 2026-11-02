@@ -6,7 +6,7 @@
 
 OpenCloud may keep metadata in POSIX extended attributes (`user.*`) or adjacent metadata files. A plain file copy that drops extended attributes is not a reliable restore. OpenCloud's backup guidance requires a consistent point in time: stop the OpenCloud application or use an application-consistent storage snapshot, then back up **configuration and all relevant data**. The search index may be rebuilt after a recovery if omitted, but identity material, file metadata, and blobs must not be omitted.
 
-Sources: [OpenCloud backup guidance](https://docs.opencloud.eu/docs/next/admin/maintenance/backup/), [PosixFS metadata](https://docs.opencloud.eu/docs/next/admin/configuration/storage/storage-posix/), and [production considerations](https://docs.opencloud.eu/docs/next/admin/getting-started/container/docker-compose/docker-compose-production-considerations/).
+Sources: [OpenCloud backup guidance](https://docs.opencloud.eu/docs/admin/maintenance/backup/), [PosixFS metadata](https://docs.opencloud.eu/docs/next/admin/configuration/storage/storage-posix/), and [production considerations](https://docs.opencloud.eu/docs/next/admin/getting-started/container/docker-compose/docker-compose-production-considerations/).
 
 ## Gate A — inventory and ownership
 
