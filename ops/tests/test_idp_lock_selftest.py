@@ -23,6 +23,7 @@ def test():
         shutil.copyfile(SCRIPT, root / "ops/tests/test_idp_lock_contract.py")
         shutil.copyfile(IDP / "package.json", root / "services/idp/package.json")
         shutil.copyfile(IDP / "pnpm-lock.yaml", root / "services/idp/pnpm-lock.yaml")
+        shutil.copyfile(IDP / "Makefile", root / "services/idp/Makefile")
         cmd = [sys.executable, str(root / "ops/tests/test_idp_lock_contract.py")]
         good = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         assert good.returncode == 0, "Valid locked source must pass"
@@ -34,7 +35,20 @@ def test():
         bad = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         assert bad.returncode != 0, "Manifest-to-lock drift must fail"
         assert "Specifier drift for axios" in bad.stderr, "Wrong failure reason"
-    print("PASS: IDP lock contract detects a synthetic dependency version drift")
+        # Restore legitimate manifest and make the Makefile silently mutable.
+        # The same contract must fail before any frontend dependency installation.
+        shutil.copyfile(IDP / "package.json", pkg)
+        makefile = root / "services/idp/Makefile"
+        original = makefile.read_text(encoding="utf-8")
+        assert "\tpnpm install --frozen-lockfile\n" in original
+        makefile.write_text(
+            original.replace("\tpnpm install --frozen-lockfile\n", "\tpnpm install\n"),
+            encoding="utf-8",
+        )
+        bad_install = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        assert bad_install.returncode != 0, "Unfrozen IDP install must fail"
+        assert "IDP install must fail closed" in bad_install.stderr, "Wrong failure reason"
+    print("PASS: IDP lock contract rejects both dependency drift and unfrozen install")
 
 
 if __name__ == "__main__":
