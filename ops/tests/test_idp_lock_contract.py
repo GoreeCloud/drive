@@ -3,6 +3,8 @@
 
 Not a vulnerability scan. Requires PyYAML. Never runs install scripts or modifies files.
 """
+import base64
+import binascii
 import json
 import re
 import shlex
@@ -49,9 +51,30 @@ def check():
             assert entry.get("version"), "Unresolved direct dependency " + name
         summary[key] = len(declared)
     assert lock.get("packages") and lock.get("snapshots"), "Incomplete lockfile"
+    # The current registry lock records have explicit SHA-512 tarball digests.
+    # Fail closed if a record loses integrity or starts fetching from a custom
+    # URL. This is metadata consistency, not an independent vulnerability scan.
+    packages = lock["packages"]
+    assert isinstance(packages, dict)
+    for package, entry in packages.items():
+        assert isinstance(package, str) and isinstance(entry, dict), "Invalid package record"
+        resolution = entry.get("resolution")
+        assert isinstance(resolution, dict) and set(resolution) == {"integrity"}, (
+            "Untrusted or missing registry integrity metadata for " + package
+        )
+        integrity = resolution["integrity"]
+        assert isinstance(integrity, str) and integrity.startswith("sha512-"), (
+            "Invalid SHA-512 integrity metadata for " + package
+        )
+        try:
+            digest = base64.b64decode(integrity.removeprefix("sha512-"), validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise AssertionError("Invalid SHA-512 integrity metadata for " + package) from exc
+        assert len(digest) == 64, "Invalid SHA-512 integrity metadata for " + package
     assert isinstance(lock.get("overrides", {}), dict)
     summary["lockedPackages"] = len(lock["packages"])
     summary["snapshots"] = len(lock["snapshots"])
+    summary["sha512PinnedPackages"] = len(packages)
     summary["overrides"] = len(lock.get("overrides", {}))
     summary["packageManager"] = pkg["packageManager"]
     print(json.dumps({"status": "PASS", "idpLockContract": summary}, sort_keys=True))
