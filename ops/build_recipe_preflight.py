@@ -19,9 +19,9 @@ REVIEWED_BUILDER = "sha256:620c7a90212b46c4aa90e64ce6ed5cbb8934ccabc056d6bfd6bb2
 def release_hold_labels(recipe: str) -> list[str]:
     """Return explicit hold-label values from Dockerfile LABEL instructions.
 
-    This intentionally does not treat comments, RUN/ENV/ARG text or shell
-    output as Dockerfile labels. Continuations are joined before inspection.
-    It is a narrow static contract, not a full Dockerfile interpreter.
+    Comments, RUN/ENV/ARG text and shell output must never masquerade as a
+    hold label. Join Dockerfile continuations before inspecting LABEL fields.
+    This is a narrow source contract, not a full Dockerfile interpreter.
     """
     values = []
     parts = []
@@ -35,19 +35,19 @@ def release_hold_labels(recipe: str) -> list[str]:
             continue
         logical = " ".join(parts)
         parts.clear()
-        match = re.match(r"^LABEL\\s+(.+)$", logical, re.IGNORECASE)
+        match = re.match(r"^LABEL\s+(.+)$", logical, re.IGNORECASE)
         if not match:
             continue
-        # A later LABEL can override an earlier value in the built image.
+        # Multiple markers are ambiguous; a later LABEL can override earlier
+        # values and leave the image falsely marked as a non-release artifact.
         for value in re.findall(
-            r'(?:^|\\s)goreecloud\\.release\\.approved\\s*=\\s*(?:"([^"]*)"|\\x27([^\\x27]*)\\x27|([^\\s]+))',
+            r"""(?:^|\s)goreecloud\.release\.approved\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))""",
             match.group(1),
         ):
             values.append(next((part for part in value if part), ""))
     if parts:
         raise ValueError("Unterminated Dockerfile instruction")
     return values
-
 
 def assess(go_mod: str, recipe: str, target: str) -> dict:
     result = {"target": target, "status": "BLOCKED", "releaseApproved": False, "findings": []}
