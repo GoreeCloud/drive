@@ -26,7 +26,7 @@ def check():
     # The project ships an authentication UI. A production asset build must
     # not silently resolve new dependencies when its manifest and lock disagree.
     makefile = (IDP / "Makefile").read_text(encoding="utf-8")
-    recipes = re.findall(r"(?m)^node_modules:[^\\n]*\\n(\\t[^\\n]+)$", makefile)
+    recipes = re.findall(r"(?m)^node_modules:[^\n]*\n(\t[^\n]+)$", makefile)
     assert len(recipes) == 1, "Unique IDP node_modules recipe not found"
     assert shlex.split(recipes[0].strip()) == [
         "pnpm", "install", "--frozen-lockfile"
