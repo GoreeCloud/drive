@@ -13,6 +13,14 @@ import shutil
 import sys
 
 def evaluate(total, free, inode_total, inode_free, min_gib, min_percent, inode_min_percent):
+    # A missing/contradictory measurement must never be reported as PASS.
+    counters = (total, free, inode_total, inode_free)
+    if any(type(value) is not int or value < 0 for value in counters):
+        raise ValueError("Invalid filesystem counters")
+    if total == 0 or free > total or inode_free > inode_total:
+        raise ValueError("Inconsistent filesystem counters")
+    if inode_total == 0 and inode_min_percent > 0:
+        raise ValueError("Inode counters unavailable with positive inode threshold")
     gib = 1024 ** 3
     disk_free_percent = (free / total * 100) if total else 0
     inode_free_percent = (inode_free / inode_total * 100) if inode_total else None
@@ -70,8 +78,8 @@ def main():
         )
         print(json.dumps(result,sort_keys=True))
         return 2 if result["status"] == "CRITICAL" else 0
-    except OSError:
-        print("ERROR: Could not read filesystem statistics",file=sys.stderr)
+    except (OSError, ValueError):
+        print("ERROR: Filesystem statistics unavailable or inconsistent", file=sys.stderr)
         return 3
 
 if __name__=="__main__":
