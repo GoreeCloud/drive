@@ -61,10 +61,27 @@ class StorageHeadroomContracts(unittest.TestCase):
                     [sys.executable, str(SCRIPT), "--path", "/", f"--min-percent={value}"],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=8
                 )
-                self.assertEqual(result.returncode, 2)
+                self.assertEqual(result.returncode, 3)
                 self.assertIn("thresholds must be finite and nonnegative", result.stderr)
                 self.assertNotIn("free_gib", result.stdout)
 
+
+    def test_invalid_cli_configuration_is_not_a_false_capacity_alert(self):
+        for options in (
+            ["--path", "/", "--min-percent=101"],
+            ["--path", "/", "--min-inode-percent=101"],
+            ["--path", "/", "--min-gib=not-a-number"],
+            ["--path", "/"],
+            ["--unknown-option"],
+        ):
+            with self.subTest(options=options):
+                args = options if options != ["--path", "/"] else ["--path", "/", "--min-gib=-1"]
+                result = subprocess.run([sys.executable, str(SCRIPT), *args],
+                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                        text=True, timeout=8)
+                self.assertEqual(result.returncode, 3)
+                self.assertIn("ERROR: Invalid storage monitor arguments:", result.stderr)
+                self.assertNotIn("free_gib", result.stdout)
 
 if __name__ == "__main__":
     unittest.main()
