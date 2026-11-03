@@ -16,6 +16,39 @@ RECIPES = {
 REVIEWED_BUILDER = "sha256:620c7a90212b46c4aa90e64ce6ed5cbb8934ccabc056d6bfd6bb2683f3f1d1e4"
 
 
+def release_hold_labels(recipe: str) -> list[str]:
+    """Return explicit hold-label values from Dockerfile LABEL instructions.
+
+    This intentionally does not treat comments, RUN/ENV/ARG text or shell
+    output as Dockerfile labels. Continuations are joined before inspection.
+    It is a narrow static contract, not a full Dockerfile interpreter.
+    """
+    values = []
+    parts = []
+    for raw in recipe.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        continued = line.endswith("\\")
+        parts.append(line[:-1].strip() if continued else line)
+        if continued:
+            continue
+        logical = " ".join(parts)
+        parts.clear()
+        match = re.match(r"^LABEL\\s+(.+)$", logical, re.IGNORECASE)
+        if not match:
+            continue
+        # A later LABEL can override an earlier value in the built image.
+        for value in re.findall(
+            r'(?:^|\\s)goreecloud\\.release\\.approved\\s*=\\s*(?:"([^"]*)"|\\x27([^\\x27]*)\\x27|([^\\s]+))',
+            match.group(1),
+        ):
+            values.append(next((part for part in value if part), ""))
+    if parts:
+        raise ValueError("Unterminated Dockerfile instruction")
+    return values
+
+
 def assess(go_mod: str, recipe: str, target: str) -> dict:
     result = {"target": target, "status": "BLOCKED", "releaseApproved": False, "findings": []}
     version = re.search(r"^go\s+(\d+)\.(\d+)(?:\.\d+)?\s*$", go_mod, re.MULTILINE)
