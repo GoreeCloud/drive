@@ -4,6 +4,8 @@
 Not a vulnerability scan. Requires PyYAML. Never runs install scripts or modifies files.
 """
 import json
+import re
+import shlex
 from pathlib import Path
 
 try:
@@ -21,6 +23,14 @@ def check():
     assert isinstance(lock, dict) and str(lock.get("lockfileVersion")) == "9.0"
     assert pkg.get("private") is True, "IDP should remain a private package"
     assert pkg.get("packageManager") == "pnpm@11.1.3", "Pinned package manager changed"
+    # The project ships an authentication UI. A production asset build must
+    # not silently resolve new dependencies when its manifest and lock disagree.
+    makefile = (IDP / "Makefile").read_text(encoding="utf-8")
+    recipes = re.findall(r"(?m)^node_modules:[^\\n]*\\n(\\t[^\\n]+)$", makefile)
+    assert len(recipes) == 1, "Unique IDP node_modules recipe not found"
+    assert shlex.split(recipes[0].strip()) == [
+        "pnpm", "install", "--frozen-lockfile"
+    ], "IDP install must fail closed with --frozen-lockfile"
     imp = lock.get("importers", {}).get(".")
     assert isinstance(imp, dict), "Root importer not found"
     summary = {}
