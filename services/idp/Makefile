@@ -32,8 +32,10 @@ pnpm-build: node_modules
 	pnpm build
 
 .PHONY: node_modules
+# Fail closed on manifest/lock drift: never resolve a new dependency graph
+# implicitly during the identity-provider build.
 node_modules:
-	pnpm install
+	pnpm install --frozen-lockfile
 
 .PHONY: ci-node-check-licenses
 ci-node-check-licenses: node_modules
