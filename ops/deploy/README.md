@@ -28,6 +28,17 @@ Defaults are a minimum **20 GiB free**, **20% free filesystem space**, and **10%
 
 **This is an on-demand check only.** Do not claim alerts are actively sent or quotas are enforced until a secured, authorized monitoring scheduler/receiver and capacity controls are configured and tested. Disk usage can change immediately after a check. The absolute/free-percent thresholds are temporary safeguards, not a substitute for capacity planning.
 
+## Offline Go builder compatibility preflight
+
+The experimental patched source requires Go 1.26, while the original production-track `Dockerfile` still selects a Go 1.25 builder. Use this **read-only** check before assessing a build recipe:
+
+```sh
+python3 ops/build_recipe_preflight.py --target production
+python3 ops/build_recipe_preflight.py --target security-trial-pinned
+```
+
+The production recipe currently yields `BLOCKED` (exit 2) for the builder/toolchain mismatch. The separately reviewed digest-pinned security-trial recipe yields `PASS_STATIC` (exit 0) if its known builder digest, flags and explicit `goreecloud.release.approved="false"` safety label are present. The Go version associated with that digest comes from **prior isolated build evidence**, not a fresh image attestation. Neither result verifies a live binary, frontend or OS vulnerabilities, recovery, identity integration or deployment eligibility. The unpinned `apk add` packages remain a reproducibility gap. The PR CI runs synthetic fail-closed tests without starting containers or installing packages.
+
 ## Operator prerequisites and hold points
 
 1. Verify the source checkout revision, image build exit code, image OCI labels and applicable vulnerability analysis. Build from the branded production branch rather than silently using an upstream image.
