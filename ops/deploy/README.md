@@ -24,7 +24,7 @@ On a compatible Linux host with the *actual* persistent Drive data directory pre
 python3 ops/monitor_storage.py --path /path/to/goreecloud-drive/data
 ```
 
-Defaults are a minimum **20 GiB free**, **20% free filesystem space**, and **10% free inodes**. It prints one JSON object, returns exit code `0` for PASS, `2` for CRITICAL, and `3` for a filesystem error. It warns if the data directory shares the OS filesystem. A deliberate high threshold should produce `CRITICAL` when exercising negative-path tests.
+Defaults are a minimum **20 GiB free**, **20% free filesystem space**, and **10% free inodes**. It prints one JSON object, returns exit code `0` for PASS, `2` for a confirmed CRITICAL capacity/filesystem-policy result, and `3` for invalid CLI settings or a filesystem-statistics error. The monitor never emits capacity JSON for configuration mistakes. It warns if the data directory shares the OS filesystem. A deliberate high threshold should produce `CRITICAL` when exercising negative-path tests.
 
 **This is an on-demand check only.** Do not claim alerts are actively sent or quotas are enforced until a secured, authorized monitoring scheduler/receiver and capacity controls are configured and tested. Disk usage can change immediately after a check. The absolute/free-percent thresholds are temporary safeguards, not a substitute for capacity planning.
 
