@@ -23,6 +23,26 @@ class StorageHeadroomContracts(unittest.TestCase):
         inode = evaluate(100 * GIB, 80 * GIB, 1000, 50, 20.0, 20.0, 10.0)
         self.assertIn("inode_free_below_percent_limit", inode["findings"])
 
+    def test_missing_or_inconsistent_filesystem_metrics_never_pass(self):
+        bad_counters = [
+            (0, 0, 1000, 500),
+            (100, 101, 1000, 500),
+            (100, -1, 1000, 500),
+            (100, 50, 1000, 1001),
+            (100, 50, -1, 0),
+            (100, 50, 0, 0),
+            (100.0, 50, 1000, 500),
+        ]
+        for args in bad_counters:
+            with self.subTest(args=args):
+                with self.assertRaises(ValueError):
+                    evaluate(*args, 0.0, 0.0, 10.0)
+        # Filesystems that do not expose inode counts can explicitly disable
+        # inode alerting, while remaining transparent about unknown usage.
+        allowed = evaluate(100 * GIB, 60 * GIB, 0, 0, 0.0, 0.0, 0.0)
+        self.assertEqual(allowed["status"], "PASS")
+        self.assertIsNone(allowed["inode_free_percent"])
+
     def test_root_device_policy_is_opt_in_and_never_changes_original(self):
         original = evaluate(100 * GIB, 80 * GIB, 100, 90, 20.0, 20.0, 10.0)
         warned = enforce_filesystem_policy(original, True)
