@@ -2,7 +2,7 @@
 """Read-only GoreeCloud Drive storage headroom check.
 
 Linux/POSIX only. Does not install a scheduler, enforce quotas or touch files.
-Exit 0 = within configured thresholds; exit 2 = below threshold; exit 3 = error.
+Exit 0 = within configured thresholds; exit 2 = below threshold; exit 3 = configuration/IO error.
 """
 import argparse
 import json
@@ -50,8 +50,16 @@ def enforce_filesystem_policy(result, shares_root_device, require_separate_files
             checked["status"] = "CRITICAL"
     return checked
 
+class StorageArgumentParser(argparse.ArgumentParser):
+    """Configuration mistakes are monitoring errors, not capacity alerts."""
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print("ERROR: Invalid storage monitor arguments: " + message, file=sys.stderr)
+        self.exit(3)
+
+
 def main():
-    p = argparse.ArgumentParser(description=__doc__)
+    p = StorageArgumentParser(description=__doc__)
     p.add_argument("--path", required=True, help="Directory to check; must exist")
     p.add_argument("--min-gib", type=float, default=20.0)
     p.add_argument("--min-percent", type=float, default=20.0)
