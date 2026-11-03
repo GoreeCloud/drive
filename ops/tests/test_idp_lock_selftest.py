@@ -10,6 +10,8 @@ import subprocess
 import sys
 import tempfile
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "ops/tests/test_idp_lock_contract.py"
 IDP = ROOT / "services/idp"
@@ -48,7 +50,26 @@ def test():
         bad_install = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
         assert bad_install.returncode != 0, "Unfrozen IDP install must fail"
         assert "IDP install must fail closed" in bad_install.stderr, "Wrong failure reason"
-    print("PASS: IDP lock contract rejects both dependency drift and unfrozen install")
+        # Restoring the trusted recipe isolates lockfile tampering tests.
+        shutil.copyfile(IDP / "Makefile", makefile)
+        lock = root / "services/idp/pnpm-lock.yaml"
+        for mutation, expected in (
+            ("bad_digest", "Invalid SHA-512 integrity metadata"),
+            ("untrusted_url", "Untrusted or missing registry integrity metadata"),
+        ):
+            data = yaml.safe_load((IDP / "pnpm-lock.yaml").read_text(encoding="utf-8"))
+            first = next(iter(data["packages"]))
+            resolution = data["packages"][first]["resolution"]
+            if mutation == "bad_digest":
+                resolution["integrity"] = "sha512-not-valid-base64!"
+            else:
+                resolution["tarball"] = "http://untrusted.invalid/package.tgz"
+            lock.write_text(yaml.safe_dump(data), encoding="utf-8")
+            negative = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+            assert negative.returncode != 0, mutation + " must fail"
+            assert expected in negative.stderr, mutation + " rejected for wrong reason"
+
+    print("PASS: IDP lock contract rejects drift, unfrozen installs, invalid hashes and custom tarballs")
 
 
 if __name__ == "__main__":
