@@ -38,7 +38,7 @@ class StorageHeadroomContracts(unittest.TestCase):
         for value in ("nan", "inf", "-inf", "-1"):
             with self.subTest(value=value):
                 result = subprocess.run(
-                    [sys.executable, str(SCRIPT), "--path", "/", "--min-percent", value],
+                    [sys.executable, str(SCRIPT), "--path", "/", f"--min-percent={value}"],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=8
                 )
                 self.assertEqual(result.returncode, 2)
