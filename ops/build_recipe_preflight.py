@@ -3,6 +3,7 @@
 import argparse
 import json
 import re
+import shlex
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -40,11 +41,19 @@ def release_hold_labels(recipe: str) -> list[str]:
             continue
         # Multiple markers are ambiguous; a later LABEL can override earlier
         # values and leave the image falsely marked as a non-release artifact.
-        for value in re.findall(
-            r"""(?:^|\s)goreecloud\.release\.approved\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s]+))""",
-            match.group(1),
-        ):
-            values.append(next((part for part in value if part), ""))
+        # shlex preserves quoted LABEL values as one field. Regex scanning can
+        # mistake a marker embedded in a different label's quoted value for
+        # a real independent release hold.
+        try:
+            fields = shlex.split(match.group(1), comments=False, posix=True)
+        except ValueError as exc:
+            raise ValueError("Malformed Dockerfile LABEL instruction") from exc
+        for field in fields:
+            key, separator, value = field.partition("=")
+            if not separator or not re.fullmatch(r"[A-Za-z0-9_.-]+", key):
+                raise ValueError("Malformed Dockerfile LABEL field")
+            if key == "goreecloud.release.approved":
+                values.append(value)
     if parts:
         raise ValueError("Unterminated Dockerfile instruction")
     return values
