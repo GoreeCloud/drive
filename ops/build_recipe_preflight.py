@@ -80,7 +80,12 @@ def assess(go_mod: str, recipe: str, target: str) -> dict:
         if image != "quay.io/opencloudeu/golang-ci@" + REVIEWED_BUILDER:
             result["findings"].append("security_trial_builder_not_reviewed_digest")
             return result
-        if 'goreecloud.release.approved="false"' not in recipe:
+        try:
+            holds = release_hold_labels(recipe)
+        except ValueError:
+            result["findings"].append("security_trial_invalid_release_hold_instruction")
+            return result
+        if holds != ["false"]:
             result["findings"].append("security_trial_missing_explicit_release_hold")
             return result
         if not re.search(r"^RUN make go-generate build ENABLE_VIPS=true EDITION=dev\s*$", recipe, re.MULTILINE):
