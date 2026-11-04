@@ -46,6 +46,9 @@ class BuildRecipeTests(unittest.TestCase):
                    + "\nENV " + marker + "\n",
             "duplicate": recipe + '\nLABEL goreecloud.release.approved="true"\n',
             "double_false": recipe + '\nLABEL ' + marker + '\n',
+            "embedded_marker_in_other_label": recipe.replace(
+                marker, 'org.example.description="other value goreecloud.release.approved=false"'),
+            "invalid_label_field": recipe + '\nLABEL not-a-key-value\n',
             "missing": recipe.replace(marker, 'goreecloud.release.approved="true"'),
             "unterminated": recipe + '\nLABEL org.example.foo="bar" \\\n',
         }
