@@ -85,10 +85,9 @@ class BuildRecipeTests(unittest.TestCase):
         self.assertEqual(checked["status"], "PASS_STATIC")
         self.assertFalse(checked["releaseApproved"])
         # A true final-stage label must not be concealed by an earlier false.
-        final_true = earlier_and_final.replace(marker,
-                                                'goreecloud.release.approved="true"', 1)
-        final_true = final_true.replace(marker,
-                                        'goreecloud.release.approved="true"', 1)
+        prefix, separator, suffix = earlier_and_final.rpartition(marker)
+        self.assertEqual(separator, marker)
+        final_true = prefix + 'goreecloud.release.approved="true"' + suffix
         self.assertEqual(release_hold_labels(final_true), ["true"])
         self.assertEqual(assess(self.module, final_true,
                                 "security-trial-pinned")["status"], "BLOCKED")
