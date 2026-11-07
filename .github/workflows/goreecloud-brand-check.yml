@@ -15,6 +15,14 @@ jobs:
           persist-credentials: false
       - name: Validate theme assets and source attribution
         run: python3 scripts/validate_drive_branding.py
+      - name: Validate read-only storage headroom policy
+        if: hashFiles('ops/tests/test_monitor_storage.py') != ''
+        run: python3 -m unittest discover -s ops/tests -p 'test_monitor_storage.py' -v
+      - name: Validate offline Go builder preflight and security hold
+        if: hashFiles('ops/tests/test_build_recipe_preflight.py') != ''
+        run: |
+          python3 -m unittest discover -s ops/tests -p 'test_build_recipe_preflight.py' -v
+          python3 ops/build_recipe_preflight.py --target security-trial-pinned
       - name: Validate IDP lock contract and synthetic drift detection (PR 3)
         if: github.event_name == 'pull_request' && (github.event.pull_request.number == 3 || github.head_ref == 'security/goreecloud-7.2.4-vuln-trial')
         run: |
