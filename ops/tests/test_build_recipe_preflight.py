@@ -69,7 +69,7 @@ class BuildRecipeTests(unittest.TestCase):
         # Dockerfile LABEL in the Go build stage does not appear in the final
         # Alpine image. A build-stage-only hold must never produce PASS_STATIC.
         moved = recipe.replace(marker, 'org.example.runtime.marker="not-a-hold"')
-        moved = moved.replace(final_from, f"LABEL {marker}\\n{final_from}", 1)
+        moved = moved.replace(final_from, f"LABEL {marker}\n{final_from}", 1)
         self.assertEqual(release_hold_labels(moved), [])
         result = assess(self.module, moved, "security-trial-pinned")
         self.assertEqual(result["status"], "BLOCKED")
@@ -78,7 +78,7 @@ class BuildRecipeTests(unittest.TestCase):
         # An unrelated earlier stage with a hold does not invalidate a
         # correctly labeled final image (or double-count it).
         earlier_and_final = recipe.replace(final_from,
-                                            f"LABEL {marker}\\n{final_from}", 1)
+                                            f"LABEL {marker}\n{final_from}", 1)
         self.assertEqual(release_hold_labels(earlier_and_final), ["false"])
         checked = assess(self.module, earlier_and_final,
                          "security-trial-pinned")
