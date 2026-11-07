@@ -36,6 +36,12 @@ def release_hold_labels(recipe: str) -> list[str]:
             continue
         logical = " ".join(parts)
         parts.clear()
+        # Each FROM starts a new image stage. LABELs in earlier stages are
+        # not part of the final runtime image unless deliberately inherited.
+        # Reject an ambiguous inherited-only hold instead of approving it.
+        if re.match(r"^FROM\s+", logical, re.IGNORECASE):
+            values.clear()
+            continue
         match = re.match(r"^LABEL\s+(.+)$", logical, re.IGNORECASE)
         if not match:
             continue
