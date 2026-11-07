@@ -60,5 +60,38 @@ class BuildRecipeTests(unittest.TestCase):
 
 
 
+    def test_release_hold_is_from_final_runtime_stage_only(self):
+        recipe = self.recipes["security-trial-pinned"]
+        marker = 'goreecloud.release.approved="false"'
+        final_from = next(line for line in recipe.splitlines()
+                          if line.startswith("FROM alpine@sha256:"))
+        self.assertEqual(recipe.count(marker), 1)
+        # Dockerfile LABEL in the Go build stage does not appear in the final
+        # Alpine image. A build-stage-only hold must never produce PASS_STATIC.
+        moved = recipe.replace(marker, 'org.example.runtime.marker="not-a-hold"')
+        moved = moved.replace(final_from, f"LABEL {marker}\n{final_from}", 1)
+        self.assertEqual(release_hold_labels(moved), [])
+        result = assess(self.module, moved, "security-trial-pinned")
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("security_trial_missing_explicit_release_hold",
+                      result["findings"])
+        # An unrelated earlier stage with a hold does not invalidate a
+        # correctly labeled final image (or double-count it).
+        earlier_and_final = recipe.replace(final_from,
+                                            f"LABEL {marker}\n{final_from}", 1)
+        self.assertEqual(release_hold_labels(earlier_and_final), ["false"])
+        checked = assess(self.module, earlier_and_final,
+                         "security-trial-pinned")
+        self.assertEqual(checked["status"], "PASS_STATIC")
+        self.assertFalse(checked["releaseApproved"])
+        # A true final-stage label must not be concealed by an earlier false.
+        prefix, separator, suffix = earlier_and_final.rpartition(marker)
+        self.assertEqual(separator, marker)
+        final_true = prefix + 'goreecloud.release.approved="true"' + suffix
+        self.assertEqual(release_hold_labels(final_true), ["true"])
+        self.assertEqual(assess(self.module, final_true,
+                                "security-trial-pinned")["status"], "BLOCKED")
+
+
 if __name__ == "__main__":
     unittest.main()
